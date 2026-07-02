@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2 — 2026-07-02
+
+Fix MCP Registry server name case: `io.github.IcaroBichir/lorcana` (GitHub auth is case-sensitive).
+
 ## 0.1.1 — 2026-07-02
 
 Added MCP Registry verification token to README for official registry listing.

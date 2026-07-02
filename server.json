@@ -1,18 +1,18 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.icarobichir/lorcana",
+  "name": "io.github.IcaroBichir/lorcana",
   "title": "Disney Lorcana TCG Collection",
   "description": "Connect Claude to Disney Lorcana card data: enrich collections, look up cards, filter by format.",
   "repository": {
     "url": "https://github.com/IcaroBichir/lorcana-mcp",
     "source": "github"
   },
-  "version": "0.1.1",
+  "version": "0.1.2",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "lorcana-mcp",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "runtime": "python",
       "transport": {
         "type": "stdio"

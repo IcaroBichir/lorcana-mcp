@@ -214,4 +214,4 @@ pytest
 
 MIT — see [LICENSE](LICENSE).
 
-<!-- mcp-name: io.github.icarobichir/lorcana -->
+<!-- mcp-name: io.github.IcaroBichir/lorcana -->
