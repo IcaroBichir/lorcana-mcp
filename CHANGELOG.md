@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 — 2026-07-02
+
+Add MCP Registry and mcp.so badges and "Listed on" directory table to README.
+
 ## 0.1.2 — 2026-07-02
 
 Fix MCP Registry server name case: `io.github.IcaroBichir/lorcana` (GitHub auth is case-sensitive).

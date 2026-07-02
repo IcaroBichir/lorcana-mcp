@@ -3,6 +3,8 @@
 [![PyPI](https://img.shields.io/pypi/v/lorcana-mcp)](https://pypi.org/project/lorcana-mcp/)
 [![Python](https://img.shields.io/pypi/pyversions/lorcana-mcp)](https://pypi.org/project/lorcana-mcp/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![MCP Registry](https://img.shields.io/badge/MCP_Registry-listed-blue)](https://registry.modelcontextprotocol.io/servers/io.github.IcaroBichir/lorcana)
+[![mcp.so](https://img.shields.io/badge/mcp.so-lorcana--mcp-orange)](https://mcp.so/server/lorcana-mcp)
 
 MCP server that connects Claude to Disney Lorcana card data. Export your collection from TCGPlayer, hand it to Claude, and get it fully enriched with ink cost, stats, keywords, abilities, and format legality — plus a ready-to-import file for [dreamborn.ink](https://dreamborn.ink).
 
@@ -18,6 +20,16 @@ Four tools are available in Claude once the server is running:
 | `lookup_card`       | Looks up any card by name. Returns full stats, ability text, format legality, and card image URL. |
 | `filter_collection` | Filters your collection to cards legal in a given format: `core`, `infinity`, `core_zh`, `core_ja`, or `poorcana`. |
 | `audit_csv`         | Compares an enriched collection against live API data and reports any stale or wrong fields. |
+
+---
+
+## Listed on
+
+| Directory | Link |
+|---|---|
+| MCP Registry (official) | [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io/servers/io.github.IcaroBichir/lorcana) |
+| mcp.so | [mcp.so/server/lorcana-mcp](https://mcp.so/server/lorcana-mcp) |
+| PyPI | [pypi.org/project/lorcana-mcp](https://pypi.org/project/lorcana-mcp/) |
 
 ---
 
