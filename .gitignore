@@ -1,0 +1,26 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Cache
+~/.cache/lorcana-mcp/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
