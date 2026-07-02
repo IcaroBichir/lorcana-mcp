@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 — 2026-07-02
+
+Added MCP Registry verification token to README for official registry listing.
+
 ## 0.1.0 — 2026-07-02
 
 Initial release.
