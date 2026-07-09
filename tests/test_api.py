@@ -21,6 +21,10 @@ from lorcana_mcp.api import (
     score_candidates,
     resolve_card,
     search_card,
+    singer_value,
+    is_song,
+    find_song_singers,
+    dedupe_by_full_name,
 )
 
 
@@ -337,6 +341,13 @@ class TestFilterCards:
     def test_no_matches(self):
         assert filter_cards(_CARDS, rarity="Epic") == []
 
+    def test_duplicate_printings_deduplicated(self):
+        enchanted_reprint = _lj_card("Goofy - Musketeer", 2, "Character", "Steel",
+                                      rarity="Enchanted", setCode="1", strength=2, willpower=3, lore=1)
+        result = filter_cards(_CARDS + [enchanted_reprint], colors=["Steel"])
+        matches = [c for c in result if c["fullName"] == "Goofy - Musketeer"]
+        assert len(matches) == 1
+
 
 # ── fuzzy card resolution: _tokenize / _token_match / _card_score ──────────────
 
@@ -511,3 +522,122 @@ class TestSearchCardUsesScoring:
     def test_no_match_returns_none(self):
         with patch("lorcana_mcp.api.fetch_lorcana_json", return_value=_FUZZY_CARDS):
             assert search_card("xyzabc123") is None
+
+
+# ── song synergies: singer_value / is_song / find_song_singers ─────────────────
+
+def _character(name, cost, color="Amber", singer=None, colors=None):
+    abilities = []
+    if singer is not None:
+        abilities.append({"type": "keyword", "keyword": "Singer", "keywordValueNumber": singer,
+                           "fullText": f"Singer {singer}"})
+    return {
+        "fullName": name, "type": "Character", "cost": cost, "color": color, "colors": colors,
+        "abilities": abilities,
+    }
+
+
+def _song(name, cost):
+    return {"fullName": name, "type": "Action", "subtypes": ["Song"], "cost": cost, "abilities": []}
+
+
+class TestSingerValue:
+    def test_has_singer_keyword(self):
+        card = _character("Ariel - Spectacular Singer", 3, singer=5)
+        assert singer_value(card) == 5
+
+    def test_no_singer_keyword(self):
+        card = _character("Goofy - Musketeer", 2)
+        assert singer_value(card) is None
+
+    def test_non_keyword_abilities_ignored(self):
+        card = {"abilities": [{"type": "activated", "keyword": "", "fullText": "Do a thing."}]}
+        assert singer_value(card) is None
+
+
+class TestIsSong:
+    def test_song_action(self):
+        assert is_song(_song("Be Our Guest", 5)) is True
+
+    def test_non_song_action(self):
+        assert is_song({"type": "Action", "subtypes": []}) is False
+
+    def test_character_is_not_song(self):
+        assert is_song(_character("Goofy - Musketeer", 2)) is False
+
+
+class TestFindSongSingers:
+    _CARDS = [
+        _character("Cheap Singer", 2, singer=5),
+        _character("Big Singer", 6, singer=7),
+        _character("Plain Expensive", 6),
+        _character("Too Cheap", 1),
+        _character("Steel Body", 5, color="Steel"),
+        _song("Some Song", 5),  # not a Character — must be excluded
+    ]
+
+    def test_only_characters_returned(self):
+        result = find_song_singers(5, self._CARDS)
+        names = {c["fullName"] for c in result}
+        assert "Some Song" not in names
+
+    def test_singer_keyword_qualifies_below_actual_cost(self):
+        result = find_song_singers(5, self._CARDS)
+        names = {c["fullName"] for c in result}
+        assert "Cheap Singer" in names  # cost 2, but Singer 5
+
+    def test_actual_cost_qualifies_without_singer(self):
+        result = find_song_singers(5, self._CARDS)
+        names = {c["fullName"] for c in result}
+        assert "Plain Expensive" in names  # cost 6, no Singer needed
+
+    def test_too_cheap_and_no_singer_excluded(self):
+        result = find_song_singers(5, self._CARDS)
+        names = {c["fullName"] for c in result}
+        assert "Too Cheap" not in names
+
+    def test_singers_sorted_before_plain_qualifiers(self):
+        result = find_song_singers(5, self._CARDS)
+        names = [c["fullName"] for c in result]
+        singer_names = {"Cheap Singer", "Big Singer"}
+        plain_names = {"Plain Expensive", "Steel Body"}
+        last_singer_idx = max(names.index(n) for n in singer_names if n in names)
+        first_plain_idx = min(names.index(n) for n in plain_names if n in names)
+        assert last_singer_idx < first_plain_idx
+
+    def test_singers_sorted_by_value_desc_then_cost_asc(self):
+        result = find_song_singers(5, self._CARDS)
+        names = [c["fullName"] for c in result]
+        assert names.index("Big Singer") < names.index("Cheap Singer")
+
+    def test_color_filter(self):
+        result = find_song_singers(5, self._CARDS, colors=["Steel"])
+        names = {c["fullName"] for c in result}
+        assert names == {"Steel Body"}
+
+    def test_no_matches(self):
+        result = find_song_singers(99, self._CARDS)
+        assert result == []
+
+    def test_duplicate_printings_deduplicated(self):
+        cards = self._CARDS + [_character("Cheap Singer", 2, singer=5)]  # alt-art reprint
+        result = find_song_singers(5, cards)
+        matches = [c for c in result if c["fullName"] == "Cheap Singer"]
+        assert len(matches) == 1
+
+
+# ── dedupe_by_full_name ──────────────────────────────────────────────────────────
+
+class TestDedupeByFullName:
+    def test_keeps_first_occurrence(self):
+        a = {"fullName": "Goofy - Musketeer", "setCode": "1"}
+        b = {"fullName": "Goofy - Musketeer", "setCode": "1", "rarity": "Enchanted"}
+        assert dedupe_by_full_name([a, b]) == [a]
+
+    def test_distinct_names_preserved(self):
+        a = {"fullName": "Goofy - Musketeer"}
+        b = {"fullName": "Elsa - Snow Queen"}
+        assert dedupe_by_full_name([a, b]) == [a, b]
+
+    def test_empty_list(self):
+        assert dedupe_by_full_name([]) == []

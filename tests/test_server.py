@@ -16,8 +16,8 @@ def test_all_tools_registered():
     from lorcana_mcp.server import mcp
     names = {t.name for t in mcp._tool_manager.list_tools()}
     assert names == {
-        "enrich_csv", "lookup_card", "resolve_card", "search_cards", "filter_collection",
-        "audit_csv", "analyze_deck",
+        "enrich_csv", "lookup_card", "resolve_card", "search_cards", "find_song_synergies",
+        "filter_collection", "audit_csv", "analyze_deck",
     }
 
 
@@ -204,6 +204,103 @@ class TestSearchCards:
         from lorcana_mcp.server import search_cards
         with patch("lorcana_mcp.server.fetch_lorcana_json", side_effect=RuntimeError("network down")):
             result = search_cards()
+        assert "Failed to fetch card data" in result
+
+
+# ── find_song_synergies ──────────────────────────────────────────────────────────
+
+def _character(name, cost, color="Amber", singer=None):
+    abilities = []
+    if singer is not None:
+        abilities.append({"type": "keyword", "keyword": "Singer", "keywordValueNumber": singer,
+                           "fullText": f"Singer {singer}"})
+    base, _, version = name.partition(" - ")
+    return {"fullName": name, "name": base, "version": version or None, "type": "Character",
+            "cost": cost, "color": color, "colors": None, "abilities": abilities}
+
+
+def _song(name, cost, setCode="11"):
+    return {"fullName": name, "name": name, "version": None, "type": "Action",
+            "subtypes": ["Song"], "cost": cost, "abilities": [], "setCode": setCode}
+
+
+_SONG_POOL = [
+    _character("Cheap Singer - Big Voice", 2, singer=5),
+    _character("Plain Expensive - Heavy Hitter", 6),
+    _character("Too Cheap - Small Fry", 1),
+    _song("Be Our Guest", 5),
+]
+
+
+class TestFindSongSynergies:
+    def test_resolve_by_song_name(self):
+        from lorcana_mcp.server import find_song_synergies
+        with patch("lorcana_mcp.server.fetch_lorcana_json", return_value=_SONG_POOL), \
+             patch("lorcana_mcp.api.fetch_lorcana_json", return_value=_SONG_POOL):
+            result = find_song_synergies(song_name="Be Our Guest")
+        assert "Be Our Guest" in result
+        assert "Cheap Singer - Big Voice" in result
+        assert "Plain Expensive - Heavy Hitter" in result
+        assert "Too Cheap - Small Fry" not in result
+
+    def test_resolve_by_cost_threshold(self):
+        from lorcana_mcp.server import find_song_synergies
+        with patch("lorcana_mcp.server.fetch_lorcana_json", return_value=_SONG_POOL):
+            result = find_song_synergies(cost=5)
+        assert "Cheap Singer - Big Voice" in result
+        assert "Plain Expensive - Heavy Hitter" in result
+        assert "Too Cheap - Small Fry" not in result
+
+    def test_song_name_and_cost_both_given_errors(self):
+        from lorcana_mcp.server import find_song_synergies
+        result = find_song_synergies(song_name="Be Our Guest", cost=5)
+        assert "not both" in result
+
+    def test_neither_song_name_nor_cost_errors(self):
+        from lorcana_mcp.server import find_song_synergies
+        result = find_song_synergies()
+        assert "Provide either" in result
+
+    def test_resolved_non_song_card_errors(self):
+        from lorcana_mcp.server import find_song_synergies
+        with patch("lorcana_mcp.api.fetch_lorcana_json", return_value=_SONG_POOL):
+            result = find_song_synergies(song_name="Plain Expensive - Heavy Hitter")
+        assert "is not a Song card" in result
+
+    def test_song_not_found(self):
+        from lorcana_mcp.server import find_song_synergies
+        with patch("lorcana_mcp.api.fetch_lorcana_json", return_value=_SONG_POOL):
+            result = find_song_synergies(song_name="Xyzabc123")
+        assert "No card found" in result
+
+    def test_no_matching_characters(self):
+        from lorcana_mcp.server import find_song_synergies
+        with patch("lorcana_mcp.server.fetch_lorcana_json", return_value=_SONG_POOL):
+            result = find_song_synergies(cost=99)
+        assert "No characters can sing" in result
+
+    def test_color_filter(self):
+        from lorcana_mcp.server import find_song_synergies
+        pool = _SONG_POOL + [_character("Steel Body - Tank", 6, color="Steel")]
+        with patch("lorcana_mcp.server.fetch_lorcana_json", return_value=pool):
+            result = find_song_synergies(cost=5, colors="Steel")
+        assert "Steel Body - Tank" in result
+        assert "Cheap Singer - Big Voice" not in result
+
+    def test_ownership_flagged_when_collection_given(self, csv_file):
+        from lorcana_mcp.server import find_song_synergies
+        path = csv_file([
+            {"Product Name": "Cheap Singer - Big Voice", "Add to Quantity": "3"},
+        ])
+        with patch("lorcana_mcp.server.fetch_lorcana_json", return_value=_SONG_POOL):
+            result = find_song_synergies(cost=5, collection_csv=path)
+        assert "3x" in result
+        assert "Not owned" in result  # Plain Expensive isn't in the CSV
+
+    def test_fetch_failure_returns_error(self):
+        from lorcana_mcp.server import find_song_synergies
+        with patch("lorcana_mcp.server.fetch_lorcana_json", side_effect=RuntimeError("network down")):
+            result = find_song_synergies(cost=5)
         assert "Failed to fetch card data" in result
 
 

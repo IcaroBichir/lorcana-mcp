@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.7 — 2026-07-08
+
+Add `find_song_synergies` tool: given a song (fuzzy-resolved by name) or a raw cost threshold, lists every Character that can sing it — either by printed cost alone or via a Singer X keyword — split into a Singer "discount" group (highest Singer value, then cheapest actual cost) and a plain cost-qualifiers group (cheapest first). Supports an ink color filter and an optional `collection_csv` to flag owned copies.
+
+Also fixes a latent duplicate-row bug in `search_cards`/`filter_cards`: `allCards.json` lists each printing (base, Enchanted, reprints, etc.) as a separate entry, so ~580 card names had 2+ near-identical rows in results. Added `dedupe_by_full_name()` and applied it to both `filter_cards` and the new `find_song_singers`, since these variants are gameplay-identical per this repo's own documentation.
+
 ## 0.1.6 — 2026-07-08
 
 Add `resolve_card` tool and rework the underlying search engine (`score_candidates` in `api.py`) to fuzzy-match card names instead of a plain substring check. Tokenizes the query and scores it against each card's name (2x weight) and subtitle (1x weight), tolerating missing dashes ("goofy musketeer"), missing subtitles ("elsa" — ranks all versions by set recency), word order, and typos (5+ letter fuzzy-ratio matching). `resolve_card` classifies the result as a single resolved match, a ranked top-3 for ambiguous queries, or not-found. `lookup_card`'s and `analyze_deck`'s existing `search_card` calls benefit automatically since it now uses the same scorer under the hood.

@@ -457,6 +457,25 @@ def _card_has_keyword(card: dict, keyword: str) -> bool:
     return False
 
 
+def dedupe_by_full_name(cards: list[dict]) -> list[dict]:
+    """Collapse alt-art/enchanted/reprint duplicates that share a fullName.
+
+    allCards.json lists each printing as a separate entry, so the same card
+    (e.g. a base + Enchanted pair) can appear twice with identical gameplay
+    stats — see CLAUDE.md's note that Enchanted/Epic cards are gameplay-
+    identical to their base version. Keeps the first occurrence of each name.
+    """
+    seen: set[str] = set()
+    result = []
+    for c in cards:
+        full_name = c.get("fullName", "")
+        if full_name in seen:
+            continue
+        seen.add(full_name)
+        result.append(c)
+    return result
+
+
 def filter_cards(
     cards: list[dict],
     colors: list[str] | None = None,
@@ -514,5 +533,64 @@ def filter_cards(
 
         result.append(c)
 
+    result = dedupe_by_full_name(result)
     result.sort(key=lambda c: (c.get("cost") if isinstance(c.get("cost"), int) else 99, c.get("fullName", "")))
+    return result
+
+# ── Song synergies ────────────────────────────────────────────────────────────
+
+def singer_value(card: dict) -> int | None:
+    """A character's Singer X value, or None if it has no Singer keyword."""
+    for ab in card.get("abilities", []):
+        if ab.get("type") == "keyword" and ab.get("keyword") == "Singer":
+            v = ab.get("keywordValueNumber")
+            if isinstance(v, int):
+                return v
+    return None
+
+
+def is_song(card: dict) -> bool:
+    return card.get("type") == "Action" and "Song" in (card.get("subtypes") or [])
+
+
+def find_song_singers(
+    song_cost: int, cards: list[dict], colors: list[str] | None = None,
+) -> list[dict]:
+    """Every Character that can sing a song of the given cost.
+
+    A character qualifies if its printed cost meets the song cost outright, OR
+    it has a Singer X keyword with X meeting the song cost (Singer lets a
+    cheaper character punch above its actual cost for singing purposes only).
+
+    Sorted with Singer-keyword characters first (best "discount" surfaced
+    first: highest Singer value, then cheapest actual cost), followed by
+    plain cost-qualifiers sorted by actual cost ascending — the cheapest way
+    onto the board that can still belt out the song.
+    """
+    colors_lower = {c.lower() for c in colors} if colors else None
+    result = []
+    for c in cards:
+        if c.get("type") != "Character":
+            continue
+        if colors_lower is not None:
+            card_colors = {cc.lower() for cc in _card_colors(c)}
+            if not (card_colors & colors_lower):
+                continue
+
+        cost = c.get("cost")
+        sv = singer_value(c)
+        qualifies_by_cost = isinstance(cost, int) and cost >= song_cost
+        qualifies_by_singer = sv is not None and sv >= song_cost
+        if not (qualifies_by_cost or qualifies_by_singer):
+            continue
+
+        result.append(c)
+
+    result = dedupe_by_full_name(result)
+    result.sort(key=lambda c: (
+        0 if singer_value(c) is not None else 1,
+        -(singer_value(c) or 0),
+        c.get("cost") if isinstance(c.get("cost"), int) else 99,
+        c.get("fullName", ""),
+    ))
     return result

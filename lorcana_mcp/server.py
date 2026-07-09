@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import re
 
 from mcp.server.fastmcp import FastMCP
 
@@ -8,6 +9,7 @@ from .api import (
     search_card, abilities_from_lj, LJCODE_TO_SETNAME, SETNAME_TO_LJCODE,
     fetch_duels_ink, build_duels_lookup, DUELS_FORMAT_LABELS,
     fetch_lorcana_json, filter_cards, _card_colors, resolve_card as _resolve_card,
+    singer_value, is_song, find_song_singers,
 )
 from .enricher import enrich_csv as _enrich_csv, audit_csv as _audit_csv, _num_int
 from .deck import analyze_deck as _analyze_deck
@@ -17,12 +19,33 @@ mcp = FastMCP(
     instructions=(
         "Use these tools to enrich Disney Lorcana TCG collection exports from TCGPlayer, "
         "look up individual card data, resolve an informal/misspelled card name, "
-        "search the full card pool by filters, "
+        "search the full card pool by filters, find characters that can sing a given song, "
         "filter a collection by play format, "
         "audit an enriched collection for stale or wrong card data, "
         "or analyze a deck list for curve, composition, and format legality."
     ),
 )
+
+_PROMO_SUFFIX_RE = re.compile(r"\s*\([^)]*\)\s*$")
+
+
+def _load_owned_counts(csv_path: str) -> dict[str, int]:
+    """Product Name (promo suffix stripped) -> total owned quantity."""
+    counts: dict[str, int] = {}
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            name = _PROMO_SUFFIX_RE.sub("", row.get("Product Name", "")).strip()
+            if not name:
+                continue
+            try:
+                qty = int(float(row.get("Add to Quantity", "0") or "0"))
+            except ValueError:
+                qty = 0
+            if qty <= 0:
+                continue
+            key = name.lower()
+            counts[key] = counts.get(key, 0) + qty
+    return counts
 
 
 @mcp.tool()
@@ -315,6 +338,122 @@ def search_cards(
         lines.append(
             f"_{total - offset - limit} more match(es) — pass offset={offset + limit} for the next page._"
         )
+
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def find_song_synergies(
+    song_name: str = "",
+    cost: int = -1,
+    colors: str = "",
+    collection_csv: str = "",
+    limit: int = 50,
+) -> str:
+    """
+    Find every Character that can sing a given song, for free-song Singer combos.
+
+    A character can sing a song if its printed ink cost meets the song's cost
+    outright, OR it has a "Singer X" keyword with X meeting the song's cost —
+    Singer lets a cheap character punch above its actual cost for singing
+    purposes only (see the Steelsong package: Amber Singers unlocking
+    expensive Steel songs for free). Provide either song_name (resolved the
+    same fuzzy way as resolve_card) or a raw cost threshold — not both.
+
+    Results are grouped: Singer-keyword characters first (the actual
+    "discount" picks — highest Singer value, then cheapest actual cost),
+    followed by characters that simply cost enough to sing it outright,
+    cheapest first.
+
+    Args:
+        song_name: Name of a Song card, e.g. "Be Our Guest". Fuzzy-matched.
+        cost: Raw song cost threshold to use instead of song_name, e.g. 5.
+        colors: Optional comma-separated ink color(s) to restrict characters to,
+                e.g. "Amber,Steel".
+        collection_csv: Optional path to an enriched collection CSV — when given,
+                        each character is flagged with how many copies you own.
+        limit: Max characters to list (default 50, capped at 200).
+    """
+    if song_name and cost >= 0:
+        return "Provide either song_name or cost, not both."
+
+    if song_name:
+        result = _resolve_card(song_name)
+        if result["match_type"] == "not_found":
+            return f'No card found matching "{song_name}".'
+        if result["match_type"] == "ambiguous":
+            lines = [f'Multiple cards could match "{song_name}" — did you mean one of these?\n']
+            for score, card in result["candidates"]:
+                lines.append(f"- **{card.get('fullName', '—')}** ({int(score * 100)}% match)")
+            lines.append("\nCall find_song_synergies again with the exact song name.")
+            return "\n".join(lines)
+
+        song_card = result["candidates"][0][1]
+        if not is_song(song_card):
+            return f'"{song_card.get("fullName")}" is not a Song card.'
+        song_cost = song_card.get("cost")
+        song_display = song_card.get("fullName", song_name)
+    elif cost >= 0:
+        song_cost = cost
+        song_display = f"cost {cost}"
+    else:
+        return "Provide either song_name or cost."
+
+    limit = max(1, min(limit, 200))
+    color_list = [c.strip() for c in colors.split(",") if c.strip()]
+
+    try:
+        lj_cards = fetch_lorcana_json()
+    except Exception as e:
+        return f"Failed to fetch card data: {e}"
+
+    matches = find_song_singers(song_cost, lj_cards, colors=color_list or None)
+
+    if not matches:
+        return f"No characters can sing a song costing {song_cost}."
+
+    owned = _load_owned_counts(collection_csv) if collection_csv else None
+
+    total = len(matches)
+    page = matches[:limit]
+
+    header = ["Card", "Ink", "Cost", "Singer"]
+    if owned is not None:
+        header.append("Owned")
+
+    singers = [c for c in page if singer_value(c) is not None]
+    plain = [c for c in page if singer_value(c) is None]
+
+    lines = [f"**Characters that can sing \"{song_display}\"** (cost {song_cost}) — {total} match(es)\n"]
+
+    def _row(card: dict) -> str:
+        ink = "/".join(_card_colors(card)) or "—"
+        sv = singer_value(card)
+        cells = [
+            card.get("fullName", "—"), ink, str(card.get("cost", "—")),
+            f"Singer {sv}" if sv is not None else "—",
+        ]
+        if owned is not None:
+            qty = owned.get(card.get("fullName", "").lower(), 0)
+            cells.append(f"{qty}x" if qty else "Not owned")
+        return "| " + " | ".join(cells) + " |"
+
+    if singers:
+        lines.append("### Singer keyword (best discount)")
+        lines.append("| " + " | ".join(header) + " |")
+        lines.append("|" + "|".join("---" for _ in header) + "|")
+        lines.extend(_row(c) for c in singers)
+        lines.append("")
+
+    if plain:
+        lines.append("### Cost alone qualifies")
+        lines.append("| " + " | ".join(header) + " |")
+        lines.append("|" + "|".join("---" for _ in header) + "|")
+        lines.extend(_row(c) for c in plain)
+        lines.append("")
+
+    if total > limit:
+        lines.append(f"_{total - limit} more match(es) not shown — raise limit to see them._")
 
     return "\n".join(lines)
 

@@ -12,17 +12,18 @@ MCP server that connects Claude to Disney Lorcana card data. Export your collect
 
 ## Tools
 
-Seven tools are available in Claude once the server is running:
+Eight tools are available in Claude once the server is running:
 
-| Tool                | What it does |
-|---------------------|---|
-| `enrich_csv`        | Enriches a raw TCGPlayer export with Ink, Cost, Type, Subtypes, STR/WIL/Lore, Inkable, Keywords, and Abilities. Writes an enriched CSV and a dreamborn.ink-ready import file next to the input. |
-| `lookup_card`       | Looks up any card by name. Returns full stats, ability text, format legality, and card image URL. |
-| `resolve_card`      | Fuzzy-resolves an informal, misspelled, or subtitle-less card name (e.g. "goofy musketeer", "elsa"). Returns a single confident match, a ranked top-3 to disambiguate, or nothing found. |
-| `search_cards`      | Searches the full card pool by color, type, rarity, set, cost range, keyword, ability text, or subtype — with pagination. |
-| `filter_collection` | Filters your collection to cards legal in a given format: `core`, `infinity`, `core_zh`, `core_ja`, or `poorcana`. |
-| `audit_csv`         | Compares an enriched collection against live API data and reports any stale or wrong fields. |
-| `analyze_deck`      | Analyzes a raw deck list (`4x Card Name` per line) for ink curve, inkable split, color split, card types, estimated lore/turn, and Core Constructed legality (60-card min, max 4 copies, ≤2 ink colors). |
+| Tool                  | What it does |
+|-----------------------|---|
+| `enrich_csv`          | Enriches a raw TCGPlayer export with Ink, Cost, Type, Subtypes, STR/WIL/Lore, Inkable, Keywords, and Abilities. Writes an enriched CSV and a dreamborn.ink-ready import file next to the input. |
+| `lookup_card`         | Looks up any card by name. Returns full stats, ability text, format legality, and card image URL. |
+| `resolve_card`        | Fuzzy-resolves an informal, misspelled, or subtitle-less card name (e.g. "goofy musketeer", "elsa"). Returns a single confident match, a ranked top-3 to disambiguate, or nothing found. |
+| `search_cards`        | Searches the full card pool by color, type, rarity, set, cost range, keyword, ability text, or subtype — with pagination. |
+| `find_song_synergies` | Finds every character that can sing a given song (or a raw cost threshold), split into Singer-keyword discount picks and plain cost-qualifiers. Optionally flags which ones you own. |
+| `filter_collection`   | Filters your collection to cards legal in a given format: `core`, `infinity`, `core_zh`, `core_ja`, or `poorcana`. |
+| `audit_csv`           | Compares an enriched collection against live API data and reports any stale or wrong fields. |
+| `analyze_deck`        | Analyzes a raw deck list (`4x Card Name` per line) for ink curve, inkable split, color split, card types, estimated lore/turn, and Core Constructed legality (60-card min, max 4 copies, ≤2 ink colors). |
 
 ---
 
@@ -130,6 +131,16 @@ Tokenizes the query and scores it against every card's name and subtitle, tolera
 > "Search for Rare Steel cards from Wilds Unknown"
 
 Filters: ink color(s), card type (`Character` / `Action` / `Item` / `Location` / `Song`), rarity, set name, cost range, keyword, ability text substring, and subtype — all combinable, plus pagination (`offset` + `limit`). Results are grouped by ink color and sorted by cost.
+
+### Find who can sing a song
+
+> "Which characters can sing Be Our Guest?"
+
+> "Show me Amber characters that can sing a cost-7 song"
+
+> "Who can sing Friends on the Other Side, and which ones do I own?" (pass your enriched collection CSV)
+
+A character can sing a song if its printed cost meets the song's cost outright, or it has a matching `Singer X` keyword — Singer lets a cheap character punch above its actual cost for singing purposes only. Results split into Singer-keyword "discount" picks (highest Singer value, then cheapest actual cost) and plain cost-qualifiers (cheapest first). Pass `collection_csv` to flag ownership.
 
 ### Filter your collection by format
 
