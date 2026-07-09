@@ -1,6 +1,8 @@
 """Tests for api.py — pure helper functions only (no network calls)."""
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 
 from lorcana_mcp.api import (
@@ -13,6 +15,12 @@ from lorcana_mcp.api import (
     enrich_from_lj,
     enrich_from_api,
     filter_cards,
+    _tokenize,
+    _token_match,
+    _card_score,
+    score_candidates,
+    resolve_card,
+    search_card,
 )
 
 
@@ -328,3 +336,178 @@ class TestFilterCards:
 
     def test_no_matches(self):
         assert filter_cards(_CARDS, rarity="Epic") == []
+
+
+# ── fuzzy card resolution: _tokenize / _token_match / _card_score ──────────────
+
+class TestTokenize:
+    def test_splits_on_punctuation(self):
+        assert _tokenize("Goofy - Musketeer") == ["goofy", "musketeer"]
+
+    def test_lowercases(self):
+        assert _tokenize("ELSA") == ["elsa"]
+
+    def test_apostrophe_splits_word(self):
+        assert _tokenize("Will o' the Wisp") == ["will", "o", "the", "wisp"]
+
+    def test_empty_string(self):
+        assert _tokenize("") == []
+
+
+class TestTokenMatch:
+    def test_exact_match(self):
+        assert _token_match("elsa", "elsa") is True
+
+    def test_short_tokens_require_exact(self):
+        # "te" must not match as a substring of "musketeer" — this was a real
+        # false-positive bug (short tokens are common substrings of long words).
+        assert _token_match("te", "musketeer") is False
+
+    def test_substring_requires_both_3plus_chars(self):
+        assert _token_match("of", "wolf") is False
+
+    def test_substring_match_3plus_chars(self):
+        assert _token_match("muske", "musketeer") is True
+
+    def test_fuzzy_typo_5plus_chars(self):
+        assert _token_match("musketer", "musketeer") is True
+
+    def test_fuzzy_does_not_collide_short_lookalikes(self):
+        # "elsa" (4 chars) vs "elisa" (5 chars) scores 0.89 by ratio alone —
+        # below the 5-char minimum this must NOT match, or "Elsa" queries
+        # would surface unrelated "Elisa Maza" cards.
+        assert _token_match("elsa", "elisa") is False
+
+    def test_no_match(self):
+        assert _token_match("goofy", "pete") is False
+
+
+class TestCardScore:
+    def _card(self, name, version):
+        return {"name": name, "version": version}
+
+    def test_exact_tokens_match_name_and_version(self):
+        card = self._card("Goofy", "Musketeer")
+        assert _card_score(["goofy", "musketeer"], card) == pytest.approx(0.7875)
+
+    def test_bare_name_single_token_full_recall(self):
+        card = self._card("Elsa", "Spirit of Winter")
+        assert _card_score(["elsa"], card) == 1.0
+
+    def test_no_overlap_scores_zero(self):
+        card = self._card("Goofy", "Musketeer")
+        assert _card_score(["totally", "unrelated"], card) == 0.0
+
+    def test_partial_match_scores_between_zero_and_one(self):
+        card = self._card("Pete", "Bad Guy")
+        score = _card_score(["big", "pete"], card)
+        assert 0.0 < score < 1.0
+
+    def test_extra_card_tokens_lower_precision(self):
+        tighter = self._card("Goofy", "Musketeer")
+        looser = self._card("Goofy", "Musketeer Swordsman")
+        assert _card_score(["goofy", "musketeer"], tighter) > _card_score(["goofy", "musketeer"], looser)
+
+
+# ── fuzzy card resolution: score_candidates / resolve_card / search_card ───────
+
+def _lj(name, version, setCode="1", **extra):
+    full_name = f"{name} - {version}" if version else name
+    card = {"name": name, "version": version, "fullName": full_name, "setCode": setCode}
+    card.update(extra)
+    return card
+
+
+_FUZZY_CARDS = [
+    _lj("Goofy", "Musketeer", setCode="1"),
+    _lj("Goofy", "Musketeer Swordsman", setCode="4"),
+    _lj("Elsa", "Snow Queen", setCode="9"),
+    _lj("Elsa", "Spirit of Winter", setCode="5"),
+    _lj("Elsa", "Ice Maker", setCode="12"),
+    _lj("Pete", "Bad Guy", setCode="1"),
+    _lj("Pete", "Freebooter", setCode="6"),
+    _lj("Jafar", "Newly Crowned", setCode="7"),
+    _lj("Unrelated Card", "Nothing Alike", setCode="1"),
+]
+
+
+class TestScoreCandidates:
+    def test_dashless_query_resolves_to_exact_full_name_match(self):
+        with patch("lorcana_mcp.api.fetch_lorcana_json", return_value=_FUZZY_CARDS):
+            result = score_candidates("goofy musketeer")
+        assert result[0][1]["fullName"] == "Goofy - Musketeer"
+        assert result[0][0] == 1.0
+
+    def test_missing_dash_and_word_order_normalized_to_exact(self):
+        with patch("lorcana_mcp.api.fetch_lorcana_json", return_value=_FUZZY_CARDS):
+            result = score_candidates("jafar newly crowned")
+        assert result[0][1]["fullName"] == "Jafar - Newly Crowned"
+        assert result[0][0] == 1.0
+
+    def test_bare_name_ties_broken_by_set_recency(self):
+        with patch("lorcana_mcp.api.fetch_lorcana_json", return_value=_FUZZY_CARDS):
+            result = score_candidates("elsa")
+        elsa_results = [c for score, c in result if c["name"] == "Elsa"]
+        assert len(elsa_results) == 3
+        assert result[0][1]["fullName"] == "Elsa - Ice Maker"  # setCode 12, most recent
+        assert result[0][0] == result[1][0] == 1.0  # tied scores
+
+    def test_deduplicated_by_full_name(self):
+        dupes = _FUZZY_CARDS + [_lj("Goofy", "Musketeer", setCode="1")]
+        with patch("lorcana_mcp.api.fetch_lorcana_json", return_value=dupes):
+            result = score_candidates("goofy musketeer")
+        matches = [c for score, c in result if c["fullName"] == "Goofy - Musketeer"]
+        assert len(matches) == 1
+
+    def test_set_name_filter_restricts_candidates(self):
+        with patch("lorcana_mcp.api.fetch_lorcana_json", return_value=_FUZZY_CARDS):
+            result = score_candidates("elsa", set_name="The First Chapter")
+        assert result == []  # no Elsa card is in setCode "1"
+
+    def test_no_query_tokens_returns_empty(self):
+        with patch("lorcana_mcp.api.fetch_lorcana_json", return_value=_FUZZY_CARDS):
+            assert score_candidates("") == []
+
+    def test_nonsense_query_scores_low_or_nothing(self):
+        with patch("lorcana_mcp.api.fetch_lorcana_json", return_value=_FUZZY_CARDS):
+            result = score_candidates("xyzabc123")
+        assert result == []
+
+
+class TestResolveCard:
+    def test_unambiguous_query_resolves(self):
+        with patch("lorcana_mcp.api.fetch_lorcana_json", return_value=_FUZZY_CARDS):
+            result = resolve_card("goofy musketeer")
+        assert result["match_type"] == "resolved"
+        assert len(result["candidates"]) == 1
+        assert result["candidates"][0][1]["fullName"] == "Goofy - Musketeer"
+
+    def test_bare_name_with_multiple_versions_is_ambiguous(self):
+        with patch("lorcana_mcp.api.fetch_lorcana_json", return_value=_FUZZY_CARDS):
+            result = resolve_card("elsa")
+        assert result["match_type"] == "ambiguous"
+        assert len(result["candidates"]) == 3
+
+    def test_vague_qualifier_is_ambiguous_not_resolved(self):
+        with patch("lorcana_mcp.api.fetch_lorcana_json", return_value=_FUZZY_CARDS):
+            result = resolve_card("big pete")
+        assert result["match_type"] == "ambiguous"
+        names = {c["fullName"] for _, c in result["candidates"]}
+        assert "Pete - Bad Guy" in names or "Pete - Freebooter" in names
+
+    def test_nonsense_query_not_found(self):
+        with patch("lorcana_mcp.api.fetch_lorcana_json", return_value=_FUZZY_CARDS):
+            result = resolve_card("xyzabc123")
+        assert result["match_type"] == "not_found"
+        assert result["candidates"] == []
+
+
+class TestSearchCardUsesScoring:
+    def test_returns_top_scoring_card(self):
+        with patch("lorcana_mcp.api.fetch_lorcana_json", return_value=_FUZZY_CARDS):
+            card = search_card("goofy musketeer")
+        assert card["fullName"] == "Goofy - Musketeer"
+
+    def test_no_match_returns_none(self):
+        with patch("lorcana_mcp.api.fetch_lorcana_json", return_value=_FUZZY_CARDS):
+            assert search_card("xyzabc123") is None

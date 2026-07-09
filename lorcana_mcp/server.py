@@ -7,7 +7,7 @@ from mcp.server.fastmcp import FastMCP
 from .api import (
     search_card, abilities_from_lj, LJCODE_TO_SETNAME, SETNAME_TO_LJCODE,
     fetch_duels_ink, build_duels_lookup, DUELS_FORMAT_LABELS,
-    fetch_lorcana_json, filter_cards, _card_colors,
+    fetch_lorcana_json, filter_cards, _card_colors, resolve_card as _resolve_card,
 )
 from .enricher import enrich_csv as _enrich_csv, audit_csv as _audit_csv, _num_int
 from .deck import analyze_deck as _analyze_deck
@@ -16,7 +16,8 @@ mcp = FastMCP(
     "Lorcana",
     instructions=(
         "Use these tools to enrich Disney Lorcana TCG collection exports from TCGPlayer, "
-        "look up individual card data, search the full card pool by filters, "
+        "look up individual card data, resolve an informal/misspelled card name, "
+        "search the full card pool by filters, "
         "filter a collection by play format, "
         "audit an enriched collection for stale or wrong card data, "
         "or analyze a deck list for curve, composition, and format legality."
@@ -85,24 +86,8 @@ def enrich_csv(input_path: str, cache_path: str = "") -> str:
     )
 
 
-@mcp.tool()
-def lookup_card(name: str, set_name: str = "") -> str:
-    """
-    Look up a Lorcana card by name and return its full stats, abilities, and legality.
-
-    Searches LorcanaJSON for an exact name match, then falls back to partial match.
-    Supplements with duels.ink data for format legality, structured abilities,
-    and card image URL. If the same card exists in multiple sets, the most recent
-    printing is returned unless set_name is specified.
-
-    Args:
-        name: Card name, e.g. "Mirage - Super Recruiter" or just "Mirage".
-        set_name: Optional set name to narrow the search, e.g. "Wilds Unknown".
-    """
-    card = search_card(name, set_name)
-    if not card:
-        return f'No card found matching "{name}"' + (f' in set "{set_name}"' if set_name else "") + "."
-
+def _format_card_detail(card: dict) -> str:
+    """Full stats/abilities/legality block for a single resolved card."""
     set_display = LJCODE_TO_SETNAME.get(str(card.get("setCode")), f"Set {card.get('setCode')}")
     abilities_text = abilities_from_lj(card.get("abilities", []))
 
@@ -123,7 +108,7 @@ def lookup_card(name: str, set_name: str = "") -> str:
     subtypes = ", ".join(card.get("subtypes", [])) or "—"
 
     lines = [
-        f"**{card.get('fullName', name)}**",
+        f"**{card.get('fullName', '—')}**",
         f"Set: {set_display} (#{card.get('number')})",
         f"Ink: {card.get('color', '—')}  |  Cost: {card.get('cost', '—')}  |  Inkable: {'Yes' if card.get('inkwell') else 'No'}",
         f"Type: {card.get('type', '—')}  |  Subtypes: {subtypes}",
@@ -156,6 +141,70 @@ def lookup_card(name: str, set_name: str = "") -> str:
     if abilities_text:
         lines.append(f"\n{abilities_text}")
 
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def lookup_card(name: str, set_name: str = "") -> str:
+    """
+    Look up a Lorcana card by name and return its full stats, abilities, and legality.
+
+    Searches LorcanaJSON for an exact name match, then falls back to partial match.
+    Supplements with duels.ink data for format legality, structured abilities,
+    and card image URL. If the same card exists in multiple sets, the most recent
+    printing is returned unless set_name is specified.
+
+    Args:
+        name: Card name, e.g. "Mirage - Super Recruiter" or just "Mirage".
+        set_name: Optional set name to narrow the search, e.g. "Wilds Unknown".
+    """
+    card = search_card(name, set_name)
+    if not card:
+        return f'No card found matching "{name}"' + (f' in set "{set_name}"' if set_name else "") + "."
+    return _format_card_detail(card)
+
+
+@mcp.tool()
+def resolve_card(name: str, set_name: str = "") -> str:
+    """
+    Resolve an informal, misspelled, or subtitle-less card name to specific card(s).
+
+    Unlike lookup_card's simple substring match, this tokenizes the query and
+    scores it against every card's name and subtitle, tolerating missing
+    dashes ("goofy musketeer"), missing subtitles ("Elsa" — which returns all
+    her versions), word order, and minor typos ("musketer"). Use this when
+    lookup_card fails or when you're not sure of a card's exact printed name.
+
+    Returns one of three shapes:
+      - A single confident match: full card detail (same as lookup_card).
+      - Multiple plausible matches: a ranked top-3 list with confidence scores,
+        for you to disambiguate (e.g. "Pete" with no further qualifier, or a
+        bare character name matching several printings).
+      - No match: nothing scored above the noise floor.
+
+    Args:
+        name: Informal, partial, or misspelled card name.
+        set_name: Optional set name to narrow the search, e.g. "Wilds Unknown".
+    """
+    result = _resolve_card(name, set_name)
+
+    if result["match_type"] == "not_found":
+        return f'No card found matching "{name}"' + (f' in set "{set_name}"' if set_name else "") + "."
+
+    if result["match_type"] == "resolved":
+        return _format_card_detail(result["candidates"][0][1])
+
+    lines = [f'Multiple cards could match "{name}" — did you mean one of these?\n']
+    for score, card in result["candidates"]:
+        set_display = LJCODE_TO_SETNAME.get(str(card.get("setCode")), f"Set {card.get('setCode')}")
+        stat_vals = [card.get("strength"), card.get("willpower"), card.get("lore")]
+        stats = "/".join(str(v) if v is not None else "—" for v in stat_vals) \
+            if any(v is not None for v in stat_vals) else "—"
+        lines.append(
+            f"- **{card.get('fullName', '—')}** ({int(score * 100)}% match) — "
+            f"{set_display}, Cost {card.get('cost', '—')}, {stats}"
+        )
+    lines.append("\nCall lookup_card or resolve_card again with the exact name to get full details.")
     return "\n".join(lines)
 
 

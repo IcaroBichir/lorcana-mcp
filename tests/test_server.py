@@ -16,7 +16,7 @@ def test_all_tools_registered():
     from lorcana_mcp.server import mcp
     names = {t.name for t in mcp._tool_manager.list_tools()}
     assert names == {
-        "enrich_csv", "lookup_card", "search_cards", "filter_collection",
+        "enrich_csv", "lookup_card", "resolve_card", "search_cards", "filter_collection",
         "audit_csv", "analyze_deck",
     }
 
@@ -98,6 +98,52 @@ class TestFilterCollectionPoorcana:
         from lorcana_mcp.server import filter_collection
         result = filter_collection("/nonexistent/path.csv", "poorcana")
         assert "Error" in result
+
+
+# ── resolve_card ───────────────────────────────────────────────────────────────
+
+def _lj(name, version, setCode="1", **extra):
+    full_name = f"{name} - {version}" if version else name
+    card = {"name": name, "version": version, "fullName": full_name, "setCode": setCode,
+            "cost": extra.pop("cost", 3), "strength": None, "willpower": None, "lore": None,
+            "inkwell": True, "color": "Amber", "type": "Character", "subtypes": [], "abilities": []}
+    card.update(extra)
+    return card
+
+
+_RESOLVE_CARDS = [
+    _lj("Goofy", "Musketeer", setCode="1"),
+    _lj("Goofy", "Musketeer Swordsman", setCode="4"),
+    _lj("Elsa", "Snow Queen", setCode="9"),
+    _lj("Elsa", "Spirit of Winter", setCode="5"),
+    _lj("Pete", "Bad Guy", setCode="1"),
+    _lj("Pete", "Freebooter", setCode="6"),
+]
+
+
+class TestResolveCard:
+    def test_unambiguous_query_returns_full_detail(self):
+        from lorcana_mcp.server import resolve_card
+        with patch("lorcana_mcp.api.fetch_lorcana_json", return_value=_RESOLVE_CARDS), \
+             patch("lorcana_mcp.server._duels_lookup_card", return_value=None):
+            result = resolve_card("goofy musketeer")
+        assert "Goofy - Musketeer" in result
+        assert "Goofy - Musketeer Swordsman" not in result
+
+    def test_ambiguous_query_lists_top_candidates_with_confidence(self):
+        from lorcana_mcp.server import resolve_card
+        with patch("lorcana_mcp.api.fetch_lorcana_json", return_value=_RESOLVE_CARDS):
+            result = resolve_card("elsa")
+        assert "Multiple cards could match" in result
+        assert "% match" in result
+        assert "Elsa - Snow Queen" in result
+        assert "Elsa - Spirit of Winter" in result
+
+    def test_nonsense_query_not_found(self):
+        from lorcana_mcp.server import resolve_card
+        with patch("lorcana_mcp.api.fetch_lorcana_json", return_value=_RESOLVE_CARDS):
+            result = resolve_card("xyzabc123")
+        assert "No card found" in result
 
 
 # ── search_cards ────────────────────────────────────────────────────────────────

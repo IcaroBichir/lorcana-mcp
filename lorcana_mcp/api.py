@@ -1,6 +1,7 @@
 """Card data fetching from lorcana-api.com and LorcanaJSON, plus enrichment helpers."""
 from __future__ import annotations
 
+import difflib
 import json
 import re
 import urllib.request
@@ -273,23 +274,163 @@ def load_all_data() -> tuple[dict, dict, list[dict]]:
 
 
 def search_card(name: str, set_name: str = "") -> dict | None:
-    """Find a card by name (exact then partial) across LorcanaJSON."""
+    """Find the single best-matching card by name across LorcanaJSON.
+
+    Uses fuzzy token scoring (see score_candidates) and returns the top match,
+    or None if nothing scores above zero. For ambiguous queries where several
+    cards are close contenders, use score_candidates directly to see all of them.
+    """
+    candidates = score_candidates(name, set_name)
+    return candidates[0][1] if candidates else None
+
+# ── Fuzzy card resolution ────────────────────────────────────────────────────────
+
+_WORD_RE = re.compile(r"[a-z0-9]+")
+
+
+def _tokenize(text: str) -> list[str]:
+    return _WORD_RE.findall(text.lower())
+
+
+def _token_match(query_token: str, card_token: str) -> bool:
+    """True if a query token plausibly refers to a card token.
+
+    Exact match always counts. Substring containment only kicks in once both
+    tokens are 3+ letters — otherwise short tokens like "o" or "of" become
+    accidental substrings of unrelated long words (e.g. "te" is a substring of
+    "musketeer") and pollute the results. Fuzzy-ratio matching (for typos like
+    "musketer" vs "musketeer") requires 5+ letters on both sides — below that,
+    unrelated short words collide too easily ("elsa" vs "elisa" scores 0.89).
+    """
+    if query_token == card_token:
+        return True
+    if len(query_token) < 3 or len(card_token) < 3:
+        return False
+    if query_token in card_token or card_token in query_token:
+        return True
+    if len(query_token) >= 5 and len(card_token) >= 5:
+        return difflib.SequenceMatcher(None, query_token, card_token).ratio() >= 0.85
+    return False
+
+
+def _card_score(query_tokens: list[str], card: dict) -> float:
+    """Score a card against tokenized query terms.
+
+    Character name matches are weighted 2x subtitle/version matches, since the
+    name is the more load-bearing part of a query. For multi-token queries
+    (i.e. the query includes subtitle words), an extra precision term favors
+    cards whose fields aren't padded out with unmatched words — this is what
+    lets "goofy musketeer" prefer "Goofy - Musketeer" over "Goofy - Musketeer
+    Swordsman". Single-token queries (bare character names like "Elsa") skip
+    that term so same-named cards tie and fall through to recency sorting.
+    """
+    name_tokens = _tokenize(card.get("name", "") or "")
+    version_tokens = _tokenize(card.get("version", "") or "")
+    card_tokens = name_tokens + version_tokens
+    if not card_tokens or not query_tokens:
+        return 0.0
+
+    weighted = 0.0
+    matched_query = 0
+    for qt in query_tokens:
+        if any(_token_match(qt, nt) for nt in name_tokens):
+            weighted += 2
+            matched_query += 1
+        elif any(_token_match(qt, vt) for vt in version_tokens):
+            weighted += 1
+            matched_query += 1
+
+    if matched_query == 0:
+        return 0.0
+
+    recall = weighted / (len(query_tokens) * 2)
+    if len(query_tokens) == 1:
+        return recall
+
+    covered = sum(1 for ct in card_tokens if any(_token_match(qt, ct) for qt in query_tokens))
+    precision = covered / len(card_tokens)
+    return recall * 0.85 + precision * 0.15
+
+
+def _set_recency(card: dict) -> int:
+    """Higher = more recent. Non-numeric set codes (promo sets) sort last."""
+    try:
+        return int(card.get("setCode"))
+    except (TypeError, ValueError):
+        return -1
+
+
+def score_candidates(query: str, set_name: str = "") -> list[tuple[float, dict]]:
+    """Score every LorcanaJSON card against a fuzzy query.
+
+    Tolerates missing dashes/subtitles, word order, and minor typos. An exact
+    fullName match always scores 1.0. Ties (e.g. a bare character name like
+    "Elsa" matching every version of that character) are broken by set
+    recency. Cards are deduplicated by fullName, keeping the best-scoring /
+    most recent instance. Returns (score, card) pairs sorted best-first;
+    empty if nothing scores above zero.
+    """
     lj_cards = fetch_lorcana_json()
-    name_lower = name.lower()
+    query_tokens = _tokenize(query)
+    if not query_tokens:
+        return []
 
-    # Exact fullName match (optionally filtered by set)
-    for c in lj_cards:
-        if c.get("fullName", "").lower() == name_lower:
-            if not set_name or set_name.lower() in LJCODE_TO_SETNAME.get(str(c.get("setCode")), "").lower():
-                return c
-
-    # Partial match — return the most recent set's version
-    matches = [c for c in lj_cards if name_lower in c.get("fullName", "").lower()]
     if set_name:
-        filtered = [c for c in matches if set_name.lower() in LJCODE_TO_SETNAME.get(str(c.get("setCode")), "").lower()]
-        if filtered:
-            return filtered[-1]
-    return matches[-1] if matches else None
+        set_name_lower = set_name.lower()
+        lj_cards = [
+            c for c in lj_cards
+            if set_name_lower in LJCODE_TO_SETNAME.get(str(c.get("setCode")), "").lower()
+        ]
+
+    query_token_set = set(query_tokens)
+    best_by_name: dict[str, tuple[float, dict]] = {}
+    for c in lj_cards:
+        score = _card_score(query_tokens, c)
+        if score <= 0:
+            continue
+        full_name = c.get("fullName", "")
+        # Token-set equality catches "jafar newly crowned" == "Jafar - Newly
+        # Crowned" even though punctuation/word order differ.
+        if query_token_set == set(_tokenize(full_name)):
+            score = 1.0
+        existing = best_by_name.get(full_name)
+        if existing is None or (score, _set_recency(c)) > (existing[0], _set_recency(existing[1])):
+            best_by_name[full_name] = (score, c)
+
+    return sorted(best_by_name.values(), key=lambda sc: (sc[0], _set_recency(sc[1])), reverse=True)
+
+
+# Below this, nothing scores highly enough to be worth surfacing at all.
+_NOT_FOUND_FLOOR = 0.35
+# Above this, and clear enough of the runner-up, a query is confident enough
+# to auto-resolve instead of asking the user to disambiguate.
+_RESOLVED_MIN_SCORE = 0.85
+_RESOLVED_MIN_GAP = 0.15
+
+
+def resolve_card(query: str, set_name: str = "") -> dict:
+    """Classify a fuzzy card query as resolved / ambiguous / not_found.
+
+    Returns {"match_type": "resolved" | "ambiguous" | "not_found",
+             "candidates": [(score, card), ...]}.
+
+    "resolved" means one candidate is confident and clearly ahead of the
+    runner-up (candidates has exactly 1 entry). "ambiguous" means several
+    candidates are plausible — e.g. a bare name like "Elsa" matching every
+    version of that character, or a vague query like "big pete" that only
+    partially identifies a card — and returns the top 3. "not_found" means
+    nothing cleared the noise floor.
+    """
+    candidates = score_candidates(query, set_name)
+    if not candidates or candidates[0][0] < _NOT_FOUND_FLOOR:
+        return {"match_type": "not_found", "candidates": []}
+
+    top_score = candidates[0][0]
+    runner_up = candidates[1][0] if len(candidates) > 1 else 0.0
+    if top_score >= _RESOLVED_MIN_SCORE and top_score - runner_up >= _RESOLVED_MIN_GAP:
+        return {"match_type": "resolved", "candidates": candidates[:1]}
+
+    return {"match_type": "ambiguous", "candidates": candidates[:3]}
 
 # ── Card search / filtering ─────────────────────────────────────────────────────
 
