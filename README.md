@@ -10,6 +10,43 @@ MCP server that connects Claude to Disney Lorcana card data. Export your collect
 
 ---
 
+## The simple version
+
+**What it does:** plug this into Claude and it becomes a Disney Lorcana expert that knows your actual collection — no more tab-switching between TCGPlayer, dreamborn.ink, and a wiki.
+
+Once it's connected, you can just talk to Claude like:
+
+- 🗂️ **"Enrich my collection at ~/Downloads/export.csv"** — turns a bare TCGPlayer export into a full card database (cost, stats, keywords, abilities) plus a file ready to import into dreamborn.ink
+- 🔎 **"What's that card, big pete?"** — finds cards even if you don't remember the exact name or spelling
+- 🎴 **"Show me cheap Evasive characters in Amber"** — searches the entire card pool by color, cost, keyword, rarity, whatever
+- 🎵 **"Who can sing Be Our Guest for free?"** — finds the best Singer combos for a song
+- 📋 **"Is this deck legal? 4x Goofy - Musketeer, 4x..."** — checks curve, colors, and tournament legality of any deck list
+- 💰 **"What am I missing to finish this deck, and what would it cost?"** — compares a deck list to your collection and prices the gap with live market data
+- ✅ **"Is my collection data still accurate?"** — audits your CSV against live card data and flags anything stale
+
+Everything reads from public card APIs plus your own exported CSV — no account, no login, nothing to configure.
+
+### Get it running in under a minute
+
+**1. Install it:**
+```bash
+pip install lorcana-mcp
+```
+
+**2. Connect it to Claude:**
+```bash
+claude mcp add lorcana -- lorcana-mcp serve
+```
+*(Using Claude Desktop instead? See [Add to Claude](#add-to-claude) below.)*
+
+**3. Talk to it:**
+Export your collection from TCGPlayer (**My Account → My Collection → Export**), then just say:
+> "Enrich my collection at /path/to/your/export.csv"
+
+That's it — Claude does the rest. Everything below is reference detail for when you want more control.
+
+---
+
 ## Tools
 
 Nine tools are available in Claude once the server is running:
@@ -275,12 +312,55 @@ pip install -e ".[dev]"
 pytest
 ```
 
-74 tests, no network calls required.
+205 tests, no network calls required.
 
 ---
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+## 🤖 CLAUDE READ THIS
+
+If you're an AI agent (Claude or otherwise) with this MCP server connected, read this section before making tool calls. It's the fast path to using this correctly.
+
+### Which tool to call
+
+| The user wants... | Call... | Not... |
+|---|---|---|
+| Their raw TCGPlayer export turned into a real database | `enrich_csv` | — |
+| To bring stale prices up to date without re-exporting | `enrich_csv` with `refresh_prices=True` | manually curling TCGPlayer |
+| Stats on a card whose exact name they gave you | `lookup_card` | — |
+| A card by an informal, partial, or misspelled name (e.g. "goofy musketeer", "big pete", "elsa") | `resolve_card` | `lookup_card` — it only does plain substring matching and will falsely report "not found" for anything without exact dashes/spelling |
+| To browse/filter the whole card pool (by color, type, rarity, set, cost, keyword, ability text, subtype) | `search_cards` | — |
+| Singer combos / "who can sing this song for free" | `find_song_synergies` | — |
+| Format legality of their collection (Core, Infinity, Poorcana, etc.) | `filter_collection` | — |
+| To sanity-check an enriched CSV against live data | `audit_csv` | — |
+| A decklist rated for curve, color balance, and legality | `analyze_deck` | — |
+| "What do I need to buy to finish this deck, and how much?" | `what_am_i_missing` | — |
+
+### Hard rules
+
+1. **Always pass absolute paths** for `csv_path` / `input_path` / `collection_csv`. Relative paths resolve against the server process's cwd, not the user's — this fails silently or points at the wrong file. If you don't have an absolute path, ask the user or find the file first.
+2. **Default to `resolve_card` over `lookup_card`** unless the user gave you a name you're confident is exact and correctly spelled. When in doubt, `resolve_card` is strictly more forgiving and costs nothing extra.
+3. **Never hand-roll price lookups.** `find_song_synergies` and `what_am_i_missing` already call tcgcsv.com internally with 24h caching and cheapest-printing logic. Don't `curl` TCGPlayer or scrape prices yourself.
+4. **Gameplay is identical across printings** (base, Enchanted, Epic, promo — same name, cost, stats, abilities). Every price-aware tool already picks the cheapest printing automatically; don't second-guess a suspiciously low result, and don't treat rarity as a gameplay signal.
+5. **If a user says data looks wrong or stale**, suggest `lorcana-mcp cache clear` before assuming a tool is broken — card and price data is cached 24h.
+6. **Ambiguous tool output is a feature, not an error.** `resolve_card` and `find_song_synergies` can return a ranked "did you mean" list instead of a single answer — present it to the user rather than guessing which one they meant.
+
+### Known gotchas (found the hard way — see CHANGELOG.md)
+
+- **`Product ID` (CSV column 1) ≠ `TCGplayer Id` (column 2).** Only `Product ID` matches external pricing APIs (LorcanaJSON's `externalLinks.tcgPlayerId`, tcgcsv.com's `productId`). Column 2 is an unrelated secondary ID — if you're ever writing custom code against this data, matching on it silently returns zero results.
+- **Promo cards are skipped in the dreamborn.ink output** — their numbering doesn't correspond to TCGPlayer's. Tell the user to add promos manually via dreamborn.ink's search after importing.
+- **Duplicate-looking rows in search results are printings, not bugs** — `search_cards` and `find_song_synergies` already deduplicate alt-art/Enchanted reprints by name internally, so don't be surprised the count is lower than you'd expect from a raw card list.
+
+### If you're modifying this codebase
+
+- Run `pytest` before and after any change — 205 tests, all network-free (external calls are mocked).
+- Code layout: pure/testable logic lives in `api.py` (card data + fuzzy matching + pricing), `deck.py` (deck list parsing/analysis), and `enricher.py` (CSV pipeline). `server.py` only wraps those as MCP tools and formats output — keep it that way rather than putting logic directly in tool functions.
+- A release touches four files together: `pyproject.toml` (version), `server.json` (version, for the MCP Registry), `CHANGELOG.md` (entry), and this README if tool behavior changed. Check `git log` for the pattern.
+- Publishing is a separate, explicit step (`python -m build`, `twine upload`, `mcp-publisher publish`) — never assume a version bump in `pyproject.toml` means it's live on PyPI or the registry. Check before telling a user a feature is "available."
 
 <!-- mcp-name: io.github.IcaroBichir/lorcana -->

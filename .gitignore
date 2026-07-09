@@ -24,3 +24,6 @@ htmlcov/
 .idea/
 .vscode/
 *.swp
+
+# Local notes
+TODO.md
