@@ -290,3 +290,88 @@ def search_card(name: str, set_name: str = "") -> dict | None:
         if filtered:
             return filtered[-1]
     return matches[-1] if matches else None
+
+# ── Card search / filtering ─────────────────────────────────────────────────────
+
+def _card_colors(card: dict) -> list[str]:
+    colors = card.get("colors")
+    if colors:
+        return list(colors)
+    color = card.get("color", "")
+    return color.split("-") if color else []
+
+
+def _card_type_matches(card: dict, card_type: str) -> bool:
+    ctype = card.get("type", "")
+    if card_type.lower() == "song":
+        return ctype == "Action" and "Song" in (card.get("subtypes") or [])
+    return ctype.lower() == card_type.lower()
+
+
+def _card_has_keyword(card: dict, keyword: str) -> bool:
+    keyword_lower = keyword.lower()
+    for ab in card.get("abilities", []):
+        if ab.get("type") == "keyword" and ab.get("keyword", "").lower() == keyword_lower:
+            return True
+    return False
+
+
+def filter_cards(
+    cards: list[dict],
+    colors: list[str] | None = None,
+    card_type: str = "",
+    rarity: str = "",
+    set_name: str = "",
+    cost_min: int | None = None,
+    cost_max: int | None = None,
+    keyword: str = "",
+    ability_text: str = "",
+    subtype: str = "",
+) -> list[dict]:
+    """Filter LorcanaJSON cards by any combination of the given criteria.
+
+    `colors` matches if the card has ANY of the given colors (dual-ink cards
+    match on either half). All other filters are ANDed together.
+    """
+    colors_lower = {c.lower() for c in colors} if colors else None
+    set_name_lower = set_name.lower() if set_name else ""
+    ability_text_lower = ability_text.lower() if ability_text else ""
+    subtype_lower = subtype.lower() if subtype else ""
+
+    result = []
+    for c in cards:
+        if colors_lower is not None:
+            card_colors = {cc.lower() for cc in _card_colors(c)}
+            if not (card_colors & colors_lower):
+                continue
+
+        if card_type and not _card_type_matches(c, card_type):
+            continue
+
+        if rarity and c.get("rarity", "").lower() != rarity.lower():
+            continue
+
+        if set_name_lower:
+            set_display = LJCODE_TO_SETNAME.get(str(c.get("setCode")), "")
+            if set_name_lower not in set_display.lower():
+                continue
+
+        cost = c.get("cost")
+        if cost_min is not None and (not isinstance(cost, int) or cost < cost_min):
+            continue
+        if cost_max is not None and (not isinstance(cost, int) or cost > cost_max):
+            continue
+
+        if keyword and not _card_has_keyword(c, keyword):
+            continue
+
+        if ability_text_lower and ability_text_lower not in c.get("fullText", "").lower():
+            continue
+
+        if subtype_lower and subtype_lower not in [s.lower() for s in (c.get("subtypes") or [])]:
+            continue
+
+        result.append(c)
+
+    result.sort(key=lambda c: (c.get("cost") if isinstance(c.get("cost"), int) else 99, c.get("fullName", "")))
+    return result

@@ -12,6 +12,7 @@ from lorcana_mcp.api import (
     build_duels_lookup,
     enrich_from_lj,
     enrich_from_api,
+    filter_cards,
 )
 
 
@@ -244,3 +245,86 @@ def test_enrich_from_api_not_inkable():
     }
     _, _, _, _, _, _, _, inkable, _, _ = enrich_from_api(card)
     assert inkable == "No"
+
+
+# ── filter_cards ───────────────────────────────────────────────────────────────
+
+def _lj_card(name, cost, ctype, color, rarity="Common", setCode="12",
+             strength=None, willpower=None, lore=None, subtypes=None,
+             colors=None, abilities=None, fullText=""):
+    return {
+        "fullName": name, "cost": cost, "type": ctype, "color": color, "colors": colors,
+        "rarity": rarity, "setCode": setCode, "strength": strength, "willpower": willpower,
+        "lore": lore, "subtypes": subtypes or [], "abilities": abilities or [], "fullText": fullText,
+    }
+
+
+_CARDS = [
+    _lj_card("Goofy - Musketeer", 2, "Character", "Steel", rarity="Common",
+             strength=2, willpower=3, lore=1),
+    _lj_card("Elsa - Spirit of Winter", 8, "Character", "Amethyst", rarity="Legendary",
+             strength=6, willpower=8, lore=3,
+             abilities=[{"type": "keyword", "keyword": "Evasive", "fullText": "Evasive"}]),
+    _lj_card("Be Our Guest", 5, "Action", "Amber", rarity="Uncommon", subtypes=["Song"]),
+    _lj_card("Rhino - Motivational Speaker", 3, "Character", "Amber-Steel",
+             colors=["Amber", "Steel"], rarity="Rare", strength=2, willpower=2, lore=1,
+             subtypes=["Storyborn", "Ally", "Toy"]),
+    _lj_card("Cleansing Rainwater", 1, "Item", "Sapphire", rarity="Common",
+             fullText="Banish this item to remove up to 3 damage from chosen character."),
+]
+
+
+class TestFilterCards:
+    def test_no_filters_returns_all_sorted_by_cost(self):
+        result = filter_cards(_CARDS)
+        assert [c["fullName"] for c in result] == [
+            "Cleansing Rainwater", "Goofy - Musketeer", "Rhino - Motivational Speaker",
+            "Be Our Guest", "Elsa - Spirit of Winter",
+        ]
+
+    def test_filter_by_color_single(self):
+        result = filter_cards(_CARDS, colors=["Steel"])
+        names = {c["fullName"] for c in result}
+        assert names == {"Goofy - Musketeer", "Rhino - Motivational Speaker"}
+
+    def test_filter_by_color_matches_dual_ink_on_either_half(self):
+        result = filter_cards(_CARDS, colors=["Amber"])
+        names = {c["fullName"] for c in result}
+        assert "Rhino - Motivational Speaker" in names
+        assert "Be Our Guest" in names
+
+    def test_filter_by_card_type(self):
+        result = filter_cards(_CARDS, card_type="Item")
+        assert [c["fullName"] for c in result] == ["Cleansing Rainwater"]
+
+    def test_filter_by_card_type_song(self):
+        result = filter_cards(_CARDS, card_type="Song")
+        assert [c["fullName"] for c in result] == ["Be Our Guest"]
+
+    def test_filter_by_rarity(self):
+        result = filter_cards(_CARDS, rarity="legendary")
+        assert [c["fullName"] for c in result] == ["Elsa - Spirit of Winter"]
+
+    def test_filter_by_cost_range(self):
+        result = filter_cards(_CARDS, cost_min=2, cost_max=3)
+        names = {c["fullName"] for c in result}
+        assert names == {"Goofy - Musketeer", "Rhino - Motivational Speaker"}
+
+    def test_filter_by_keyword(self):
+        result = filter_cards(_CARDS, keyword="Evasive")
+        assert [c["fullName"] for c in result] == ["Elsa - Spirit of Winter"]
+
+    def test_filter_by_ability_text_substring(self):
+        result = filter_cards(_CARDS, ability_text="remove up to 3 damage")
+        assert [c["fullName"] for c in result] == ["Cleansing Rainwater"]
+
+    def test_filter_by_subtype(self):
+        result = filter_cards(_CARDS, subtype="toy")
+        assert [c["fullName"] for c in result] == ["Rhino - Motivational Speaker"]
+
+    def test_combined_filters(self):
+        result = filter_cards(_CARDS, colors=["Steel"], cost_max=2)
+        assert [c["fullName"] for c in result] == ["Goofy - Musketeer"]
+
+    def test_no_matches(self):
+        assert filter_cards(_CARDS, rarity="Epic") == []

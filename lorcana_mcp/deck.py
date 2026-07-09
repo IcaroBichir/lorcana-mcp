@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from .api import search_card
+from .api import search_card, _card_colors
 
 _LINE_RE = re.compile(r"^(\d+)\s*[xX]?\s+(.+?)\s*$")
 _COST_BRACKETS = [(1, 2, "1-2"), (3, 4, "3-4"), (5, 6, "5-6"), (7, None, "7+")]
@@ -43,14 +43,6 @@ def _card_type_display(card: dict) -> str:
     if ctype == "Action" and "Song" in (card.get("subtypes") or []):
         return "Action - Song"
     return ctype
-
-
-def _card_colors(card: dict) -> list[str]:
-    colors = card.get("colors")
-    if colors:
-        return list(colors)
-    color = card.get("color", "")
-    return color.split("-") if color else []
 
 
 def analyze_deck(deck_text: str) -> dict:

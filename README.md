@@ -12,12 +12,13 @@ MCP server that connects Claude to Disney Lorcana card data. Export your collect
 
 ## Tools
 
-Five tools are available in Claude once the server is running:
+Six tools are available in Claude once the server is running:
 
 | Tool                | What it does |
 |---------------------|---|
 | `enrich_csv`        | Enriches a raw TCGPlayer export with Ink, Cost, Type, Subtypes, STR/WIL/Lore, Inkable, Keywords, and Abilities. Writes an enriched CSV and a dreamborn.ink-ready import file next to the input. |
 | `lookup_card`       | Looks up any card by name. Returns full stats, ability text, format legality, and card image URL. |
+| `search_cards`      | Searches the full card pool by color, type, rarity, set, cost range, keyword, ability text, or subtype — with pagination. |
 | `filter_collection` | Filters your collection to cards legal in a given format: `core`, `infinity`, `core_zh`, `core_ja`, or `poorcana`. |
 | `audit_csv`         | Compares an enriched collection against live API data and reports any stale or wrong fields. |
 | `analyze_deck`      | Analyzes a raw deck list (`4x Card Name` per line) for ink curve, inkable split, color split, card types, estimated lore/turn, and Core Constructed legality (60-card min, max 4 copies, ≤2 ink colors). |
@@ -108,6 +109,16 @@ On re-runs, pass the previous enriched file as a cache to skip already-seen card
 > "Is Will o' the Wisp legal in Core?"
 
 Returns: ink color, cost, type, subtypes, STR/WIL/Lore, inkable status, keywords, full ability text, format legality, and a card image URL.
+
+### Search the full card pool
+
+> "Show me all Evasive characters in Amethyst that cost 3 or less"
+
+> "Find Toy characters"
+
+> "Search for Rare Steel cards from Wilds Unknown"
+
+Filters: ink color(s), card type (`Character` / `Action` / `Item` / `Location` / `Song`), rarity, set name, cost range, keyword, ability text substring, and subtype — all combinable, plus pagination (`offset` + `limit`). Results are grouped by ink color and sorted by cost.
 
 ### Filter your collection by format
 

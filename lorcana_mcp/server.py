@@ -7,6 +7,7 @@ from mcp.server.fastmcp import FastMCP
 from .api import (
     search_card, abilities_from_lj, LJCODE_TO_SETNAME, SETNAME_TO_LJCODE,
     fetch_duels_ink, build_duels_lookup, DUELS_FORMAT_LABELS,
+    fetch_lorcana_json, filter_cards, _card_colors,
 )
 from .enricher import enrich_csv as _enrich_csv, audit_csv as _audit_csv, _num_int
 from .deck import analyze_deck as _analyze_deck
@@ -15,7 +16,8 @@ mcp = FastMCP(
     "Lorcana",
     instructions=(
         "Use these tools to enrich Disney Lorcana TCG collection exports from TCGPlayer, "
-        "look up individual card data, filter a collection by play format, "
+        "look up individual card data, search the full card pool by filters, "
+        "filter a collection by play format, "
         "audit an enriched collection for stale or wrong card data, "
         "or analyze a deck list for curve, composition, and format legality."
     ),
@@ -153,6 +155,117 @@ def lookup_card(name: str, set_name: str = "") -> str:
 
     if abilities_text:
         lines.append(f"\n{abilities_text}")
+
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def search_cards(
+    colors: str = "",
+    card_type: str = "",
+    rarity: str = "",
+    set_name: str = "",
+    cost_min: int = -1,
+    cost_max: int = -1,
+    keyword: str = "",
+    ability_text: str = "",
+    subtype: str = "",
+    offset: int = 0,
+    limit: int = 25,
+) -> str:
+    """
+    Search the full Lorcana card pool by any combination of filters.
+
+    All filters are optional and ANDed together, except colors: a card matches
+    if it has ANY of the given colors, so dual-ink cards surface for either half.
+
+    Args:
+        colors: Comma-separated ink color(s), e.g. "Amber,Steel". Case-insensitive.
+        card_type: "Character", "Action", "Item", "Location", or "Song" (Action
+                   cards with the Song subtype).
+        rarity: "Common", "Uncommon", "Rare", "Super Rare", "Legendary", "Enchanted",
+                "Epic", "Iconic", or "Special".
+        set_name: Set name substring, e.g. "Wilds Unknown".
+        cost_min: Minimum ink cost, inclusive. Pass -1 (default) for no minimum.
+        cost_max: Maximum ink cost, inclusive. Pass -1 (default) for no maximum.
+        keyword: Keyword ability name, e.g. "Evasive", "Rush", "Bodyguard", "Shift".
+        ability_text: Substring to search for in full ability text (case-insensitive).
+        subtype: Subtype/classification, e.g. "Toy", "Hero", "Villain", "Princess".
+        offset: Pagination offset, 0-based.
+        limit: Max results in this page (default 25, capped at 200).
+    """
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+    color_list = [c.strip() for c in colors.split(",") if c.strip()]
+
+    try:
+        lj_cards = fetch_lorcana_json()
+    except Exception as e:
+        return f"Failed to fetch card data: {e}"
+
+    matches = filter_cards(
+        lj_cards,
+        colors=color_list or None,
+        card_type=card_type,
+        rarity=rarity,
+        set_name=set_name,
+        cost_min=None if cost_min < 0 else cost_min,
+        cost_max=None if cost_max < 0 else cost_max,
+        keyword=keyword,
+        ability_text=ability_text,
+        subtype=subtype,
+    )
+
+    if not matches:
+        return "No cards matched the given filters."
+
+    total = len(matches)
+    page = matches[offset: offset + limit]
+
+    if not page:
+        return f"No results at offset {offset} — {total} total match(es) (try a smaller offset)."
+
+    by_ink: dict[str, list] = {}
+    for card in page:
+        ink = "/".join(_card_colors(card)) or "Unknown"
+        by_ink.setdefault(ink, []).append(card)
+
+    lines = [
+        f"**Search results** — {total} match(es) (showing {offset + 1}-{offset + len(page)})\n",
+    ]
+
+    for ink in sorted(by_ink):
+        lines.append(f"### {ink}")
+        lines.append("| Card | Cost | Type | STR/WIL/Lore | Keywords |")
+        lines.append("|------|------|------|------|------|")
+        for card in by_ink[ink]:
+            ctype = card.get("type", "—")
+            if ctype == "Action" and "Song" in (card.get("subtypes") or []):
+                ctype = "Action - Song"
+
+            stat_vals = [card.get("strength"), card.get("willpower"), card.get("lore")]
+            stats = "/".join(str(v) if v is not None else "—" for v in stat_vals) \
+                if any(v is not None for v in stat_vals) else "—"
+
+            keywords = [
+                ab.get("fullText", ab.get("keyword", ""))
+                for ab in card.get("abilities", [])
+                if ab.get("type") == "keyword"
+            ]
+
+            lines.append(
+                f"| {card.get('fullName', '—')} "
+                f"| {card.get('cost', '—')} "
+                f"| {ctype} "
+                f"| {stats} "
+                f"| {', '.join(keywords) or '—'} |"
+            )
+        lines.append("")
+
+    if offset + limit < total:
+        lines.append(
+            f"_{total - offset - limit} more match(es) — pass offset={offset + limit} for the next page._"
+        )
 
     return "\n".join(lines)
 

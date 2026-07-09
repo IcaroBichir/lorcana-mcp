@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5 — 2026-07-08
+
+Add `search_cards` tool: search the full LorcanaJSON card pool by ink color(s), card type (including Song), rarity, set name, cost range, keyword, ability text substring, and subtype, with pagination. Results grouped by ink and sorted by cost.
+
 ## 0.1.4 — 2026-07-08
 
 Add `analyze_deck` tool: given a raw deck list (one card per line, `4x Card Name` format), reports ink curve (1-2/3-4/5-6/7+ brackets), inkable vs. uninkable count, color split (dual-ink cards tracked as combined keys), card type split, estimated lore-per-turn, a Core Constructed legality check (60-card minimum, max 4 copies, ≤2 ink colors), and any unresolved card names.
