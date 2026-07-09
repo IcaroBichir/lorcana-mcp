@@ -12,7 +12,7 @@ MCP server that connects Claude to Disney Lorcana card data. Export your collect
 
 ## Tools
 
-Eight tools are available in Claude once the server is running:
+Nine tools are available in Claude once the server is running:
 
 | Tool                  | What it does |
 |-----------------------|---|
@@ -24,6 +24,7 @@ Eight tools are available in Claude once the server is running:
 | `filter_collection`   | Filters your collection to cards legal in a given format: `core`, `infinity`, `core_zh`, `core_ja`, or `poorcana`. |
 | `audit_csv`           | Compares an enriched collection against live API data and reports any stale or wrong fields. |
 | `analyze_deck`        | Analyzes a raw deck list (`4x Card Name` per line) for ink curve, inkable split, color split, card types, estimated lore/turn, and Core Constructed legality (60-card min, max 4 copies, ≤2 ink colors). |
+| `what_am_i_missing`   | Compares a deck list against your collection: what you already own, what's missing or short, and a live TCGPlayer cost estimate (via tcgcsv.com) to complete it. |
 
 ---
 
@@ -169,6 +170,14 @@ Useful after a new set releases or if a card's data looks wrong. Compares every 
 Accepts `4x Card Name` or `4 Card Name`; quantity defaults to 1 if omitted. Lines starting with `#` or `//` are treated as comments.
 
 Returns: ink curve (1-2/3-4/5-6/7+ cost brackets), inkable vs. uninkable count, color split, card type split, an estimated lore-per-turn (sum of Character lore values), a Core Constructed legality check (60-card minimum, max 4 copies of any card, at most 2 ink colors), and any card names that couldn't be resolved.
+
+### Check what a deck list is missing
+
+> "What am I missing to build this deck?" (paste the deck list and point me at your collection CSV)
+
+> "How much would it cost to finish this Amber/Steel list?"
+
+Same deck list format as `analyze_deck`. Cross-references against your enriched collection CSV, then splits results into cards you already have enough of and cards you're missing or short on. For anything missing, fetches live TCGPlayer market prices from [tcgcsv.com](https://tcgcsv.com) (cheapest printing across all sets/rarities, since gameplay is identical) and sums them into a completion cost estimate — a live snapshot, not a quote. Price data is cached for 24h, so the first call takes a bit longer while it warms up.
 
 ---
 

@@ -17,7 +17,7 @@ def test_all_tools_registered():
     names = {t.name for t in mcp._tool_manager.list_tools()}
     assert names == {
         "enrich_csv", "lookup_card", "resolve_card", "search_cards", "find_song_synergies",
-        "filter_collection", "audit_csv", "analyze_deck",
+        "filter_collection", "audit_csv", "analyze_deck", "what_am_i_missing",
     }
 
 
@@ -302,6 +302,75 @@ class TestFindSongSynergies:
         with patch("lorcana_mcp.server.fetch_lorcana_json", side_effect=RuntimeError("network down")):
             result = find_song_synergies(cost=5)
         assert "Failed to fetch card data" in result
+
+
+# ── what_am_i_missing ─────────────────────────────────────────────────────────────
+
+def _wam_card(name, cost=2):
+    return {"fullName": name, "type": "Character", "cost": cost, "color": "Steel", "colors": None,
+            "inkwell": True, "subtypes": [], "abilities": []}
+
+
+class TestWhatAmIMissing:
+    def test_missing_collection_file_returns_error(self):
+        from lorcana_mcp.server import what_am_i_missing
+        result = what_am_i_missing("4x Goofy - Musketeer", "/nonexistent/path.csv")
+        assert "Error" in result
+
+    def test_empty_deck_list(self, csv_file):
+        from lorcana_mcp.server import what_am_i_missing
+        path = csv_file([])
+        result = what_am_i_missing("", path)
+        assert "No cards found" in result
+
+    def test_fully_owned_card_listed_under_already_have(self, csv_file):
+        from lorcana_mcp.server import what_am_i_missing
+        path = csv_file([{"Product Name": "Goofy - Musketeer", "Add to Quantity": "4"}])
+        with patch("lorcana_mcp.deck.search_card", return_value=_wam_card("Goofy - Musketeer")):
+            result = what_am_i_missing("4x Goofy - Musketeer", path)
+        assert "Already have" in result
+        assert "Missing or short" not in result
+        assert "Goofy - Musketeer" in result
+
+    def test_missing_card_priced_and_totaled(self, csv_file):
+        from lorcana_mcp.server import what_am_i_missing
+        path = csv_file([])  # own nothing
+        with patch("lorcana_mcp.deck.search_card", return_value=_wam_card("Goofy - Musketeer")), \
+             patch("lorcana_mcp.server.fetch_lorcana_json", return_value=[]), \
+             patch("lorcana_mcp.server.fetch_tcgcsv_prices", return_value={}), \
+             patch("lorcana_mcp.server.cheapest_price_for_card", return_value=2.5):
+            result = what_am_i_missing("4x Goofy - Musketeer", path)
+        assert "Missing or short" in result
+        assert "missing 4" in result
+        assert "$10.00" in result  # 4 * $2.50
+        assert "Estimated cost to complete: $10.00" in result
+
+    def test_unpriceable_card_shows_unknown_price(self, csv_file):
+        from lorcana_mcp.server import what_am_i_missing
+        path = csv_file([])
+        with patch("lorcana_mcp.deck.search_card", return_value=_wam_card("Goofy - Musketeer")), \
+             patch("lorcana_mcp.server.fetch_lorcana_json", return_value=[]), \
+             patch("lorcana_mcp.server.fetch_tcgcsv_prices", return_value={}), \
+             patch("lorcana_mcp.server.cheapest_price_for_card", return_value=None):
+            result = what_am_i_missing("4x Goofy - Musketeer", path)
+        assert "price unknown" in result
+        assert "Could not fetch live TCGPlayer prices" not in result
+
+    def test_price_fetch_failure_does_not_crash(self, csv_file):
+        from lorcana_mcp.server import what_am_i_missing
+        path = csv_file([])
+        with patch("lorcana_mcp.deck.search_card", return_value=_wam_card("Goofy - Musketeer")), \
+             patch("lorcana_mcp.server.fetch_lorcana_json", side_effect=RuntimeError("network down")):
+            result = what_am_i_missing("4x Goofy - Musketeer", path)
+        assert "Could not fetch live TCGPlayer prices" in result
+
+    def test_unresolved_card_listed_separately(self, csv_file):
+        from lorcana_mcp.server import what_am_i_missing
+        path = csv_file([])
+        with patch("lorcana_mcp.deck.search_card", return_value=None):
+            result = what_am_i_missing("2x Totally Fake Card", path)
+        assert "Unrecognized card names" in result
+        assert "2x Totally Fake Card" in result
 
 
 # ── enrich_csv — missing file ──────────────────────────────────────────────────

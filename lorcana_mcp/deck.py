@@ -45,6 +45,24 @@ def _card_type_display(card: dict) -> str:
     return ctype
 
 
+def combine_deck_lines(parsed: list[tuple[int, str]]) -> tuple[dict[str, int], dict[str, str]]:
+    """Combine duplicate deck-list lines (case-insensitive) into total quantities.
+
+    Returns (qty_by_key, display_name_by_key), keyed by lowercased card name.
+    Dict insertion order is preserved, so callers can iterate in original
+    deck-list order.
+    """
+    combined: dict[str, int] = {}
+    name_by_key: dict[str, str] = {}
+    for qty, name in parsed:
+        key = name.strip().lower()
+        if key not in combined:
+            combined[key] = 0
+            name_by_key[key] = name.strip()
+        combined[key] += qty
+    return combined, name_by_key
+
+
 def analyze_deck(deck_text: str) -> dict:
     """
     Analyze a raw deck list and return curve, composition, and legality stats.
@@ -54,18 +72,7 @@ def analyze_deck(deck_text: str) -> dict:
     type_counts (dict type->qty), lore_per_turn, legality (dict of checks),
     unresolved (list of {name, qty}), entries (list of resolved card rows).
     """
-    parsed = parse_deck_list(deck_text)
-
-    # Combine duplicate lines referring to the same card name (case-insensitive)
-    combined: dict[str, int] = {}
-    order: list[str] = []
-    for qty, name in parsed:
-        key = name.strip().lower()
-        if key not in combined:
-            combined[key] = 0
-            order.append(key)
-        combined[key] += qty
-    name_by_key = {name.strip().lower(): name.strip() for _, name in parsed}
+    combined, name_by_key = combine_deck_lines(parse_deck_list(deck_text))
 
     total_cards = sum(combined.values())
     unique_cards = len(combined)
@@ -81,8 +88,7 @@ def analyze_deck(deck_text: str) -> dict:
     entries: list[dict] = []
     all_colors: set[str] = set()
 
-    for key in order:
-        qty = combined[key]
+    for key, qty in combined.items():
         raw_name = name_by_key[key]
 
         if qty > 4:
@@ -145,3 +151,41 @@ def analyze_deck(deck_text: str) -> dict:
         "unresolved": unresolved,
         "entries": entries,
     }
+
+
+def what_am_i_missing(deck_text: str, owned_counts: dict[str, int]) -> dict:
+    """
+    Compare a deck list against owned card quantities.
+
+    owned_counts maps a lowercased card fullName to total copies owned (see
+    server._load_owned_counts, which strips promo-suffix parentheticals before
+    lowercasing). Pricing isn't computed here — this stays network-free so
+    it's easily testable; the caller cross-references missing entries against
+    live prices.
+
+    Returns a dict with keys: entries (list of {name, needed, owned, missing}),
+    unresolved (list of {name, qty}).
+    """
+    combined, name_by_key = combine_deck_lines(parse_deck_list(deck_text))
+
+    entries: list[dict] = []
+    unresolved: list[dict] = []
+
+    for key, needed in combined.items():
+        raw_name = name_by_key[key]
+        card = search_card(raw_name)
+        if not card:
+            unresolved.append({"name": raw_name, "qty": needed})
+            continue
+
+        full_name = card.get("fullName", raw_name)
+        owned = owned_counts.get(full_name.lower(), 0)
+
+        entries.append({
+            "name": full_name,
+            "needed": needed,
+            "owned": owned,
+            "missing": max(needed - owned, 0),
+        })
+
+    return {"entries": entries, "unresolved": unresolved}

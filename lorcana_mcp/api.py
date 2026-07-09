@@ -171,7 +171,9 @@ def enrich_from_lj(c: dict) -> tuple:
 # ── API fetch + lookup builders ────────────────────────────────────────────────
 
 def _fetch(url: str) -> bytes:
-    return urllib.request.urlopen(url, timeout=60).read()
+    # Some hosts (tcgcsv.com) reject the default "Python-urllib/x.y" UA with a 401.
+    req = urllib.request.Request(url, headers={"User-Agent": "lorcana-mcp/1.0"})
+    return urllib.request.urlopen(req, timeout=60).read()
 
 
 def fetch_lorcana_api() -> list[dict]:
@@ -594,3 +596,75 @@ def find_song_singers(
         c.get("fullName", ""),
     ))
     return result
+
+# ── TCGPlayer pricing (tcgcsv.com) ──────────────────────────────────────────────
+
+LORCANA_TCGCSV_CATEGORY_ID = 71
+
+
+def fetch_tcgcsv_groups() -> list[dict]:
+    """Fetch all Lorcana set groups from tcgcsv.com (cached 24h)."""
+    cached = _cache.get("tcgcsv_groups")
+    if cached is not None:
+        return cached
+    data = json.loads(_fetch(f"https://tcgcsv.com/tcgplayer/{LORCANA_TCGCSV_CATEGORY_ID}/groups"))
+    groups = data.get("results", [])
+    _cache.set("tcgcsv_groups", groups)
+    return groups
+
+
+def fetch_tcgcsv_prices() -> dict[int, float]:
+    """Fetch and merge TCGPlayer market prices for every Lorcana set (cached 24h).
+
+    Maps productId -> marketPrice. A productId is a specific printing
+    (Normal/Holofoil/etc.) of a specific card; if the same productId somehow
+    shows up in more than one group's feed, the lowest price seen wins.
+    """
+    cached = _cache.get("tcgcsv_prices")
+    if cached is not None:
+        return {int(pid): price for pid, price in cached.items()}
+
+    prices: dict[int, float] = {}
+    for group in fetch_tcgcsv_groups():
+        group_id = group.get("groupId")
+        if group_id is None:
+            continue
+        try:
+            data = json.loads(_fetch(
+                f"https://tcgcsv.com/tcgplayer/{LORCANA_TCGCSV_CATEGORY_ID}/{group_id}/prices"
+            ))
+        except Exception:
+            continue
+        for row in data.get("results", []):
+            pid, mp = row.get("productId"), row.get("marketPrice")
+            if pid is None or mp is None:
+                continue
+            if pid not in prices or mp < prices[pid]:
+                prices[pid] = mp
+
+    _cache.set("tcgcsv_prices", prices)
+    return prices
+
+
+def cheapest_price_for_card(full_name: str, lj_cards: list[dict], price_by_pid: dict[int, float]) -> float | None:
+    """Cheapest known TCGPlayer market price across every printing of a card.
+
+    Different printings (base, Enchanted, promo, etc.) are gameplay-identical
+    but priced differently — the cheapest is the actual cheapest legal way to
+    acquire the card, regardless of rarity or art (see CLAUDE.md's "Checking
+    TCGPlayer card prices" section). Returns None if no printing has a
+    tcgPlayerId with a known price.
+    """
+    best = None
+    for c in lj_cards:
+        if c.get("fullName") != full_name:
+            continue
+        pid = (c.get("externalLinks") or {}).get("tcgPlayerId")
+        if pid is None:
+            continue
+        price = price_by_pid.get(pid)
+        if price is None:
+            continue
+        if best is None or price < best:
+            best = price
+    return best

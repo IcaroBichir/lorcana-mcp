@@ -1,6 +1,7 @@
 """Tests for api.py — pure helper functions only (no network calls)."""
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 import pytest
@@ -25,6 +26,9 @@ from lorcana_mcp.api import (
     is_song,
     find_song_singers,
     dedupe_by_full_name,
+    fetch_tcgcsv_groups,
+    fetch_tcgcsv_prices,
+    cheapest_price_for_card,
 )
 
 
@@ -641,3 +645,122 @@ class TestDedupeByFullName:
 
     def test_empty_list(self):
         assert dedupe_by_full_name([]) == []
+
+
+# ── tcgcsv pricing ────────────────────────────────────────────────────────────────
+
+
+class TestFetchTcgcsvGroups:
+    def test_cache_hit_skips_fetch(self):
+        with patch("lorcana_mcp.api._cache.get", return_value=[{"groupId": 1, "name": "Cached Set"}]), \
+             patch("lorcana_mcp.api._fetch") as mock_fetch:
+            groups = fetch_tcgcsv_groups()
+        assert groups == [{"groupId": 1, "name": "Cached Set"}]
+        mock_fetch.assert_not_called()
+
+    def test_cache_miss_fetches_and_caches(self):
+        body = json.dumps({"results": [{"groupId": 1, "name": "Set One"}]}).encode()
+        with patch("lorcana_mcp.api._cache.get", return_value=None), \
+             patch("lorcana_mcp.api._fetch", return_value=body), \
+             patch("lorcana_mcp.api._cache.set") as mock_set:
+            groups = fetch_tcgcsv_groups()
+        assert groups == [{"groupId": 1, "name": "Set One"}]
+        mock_set.assert_called_once_with("tcgcsv_groups", groups)
+
+
+class TestFetchTcgcsvPrices:
+    def test_cache_hit_returns_int_keyed_dict(self):
+        # simulates a JSON round-trip, where dict keys always come back as strings
+        with patch("lorcana_mcp.api._cache.get", return_value={"123": 4.5, "456": 1.0}):
+            prices = fetch_tcgcsv_prices()
+        assert prices == {123: 4.5, 456: 1.0}
+
+    def test_cache_miss_merges_all_groups(self):
+        groups = [{"groupId": 1}, {"groupId": 2}]
+        group_bodies = {
+            1: json.dumps({"results": [{"productId": 100, "marketPrice": 5.0}]}).encode(),
+            2: json.dumps({"results": [{"productId": 200, "marketPrice": 3.0}]}).encode(),
+        }
+
+        def fake_fetch(url):
+            group_id = 1 if "/1/prices" in url else 2
+            return group_bodies[group_id]
+
+        with patch("lorcana_mcp.api._cache.get", return_value=None), \
+             patch("lorcana_mcp.api.fetch_tcgcsv_groups", return_value=groups), \
+             patch("lorcana_mcp.api._fetch", side_effect=fake_fetch), \
+             patch("lorcana_mcp.api._cache.set") as mock_set:
+            prices = fetch_tcgcsv_prices()
+        assert prices == {100: 5.0, 200: 3.0}
+        mock_set.assert_called_once_with("tcgcsv_prices", prices)
+
+    def test_duplicate_product_id_keeps_lowest_price(self):
+        groups = [{"groupId": 1}, {"groupId": 2}]
+        group_bodies = {
+            1: json.dumps({"results": [{"productId": 100, "marketPrice": 5.0}]}).encode(),
+            2: json.dumps({"results": [{"productId": 100, "marketPrice": 2.0}]}).encode(),
+        }
+
+        def fake_fetch(url):
+            group_id = 1 if "/1/prices" in url else 2
+            return group_bodies[group_id]
+
+        with patch("lorcana_mcp.api._cache.get", return_value=None), \
+             patch("lorcana_mcp.api.fetch_tcgcsv_groups", return_value=groups), \
+             patch("lorcana_mcp.api._fetch", side_effect=fake_fetch), \
+             patch("lorcana_mcp.api._cache.set"):
+            prices = fetch_tcgcsv_prices()
+        assert prices == {100: 2.0}
+
+    def test_group_fetch_failure_is_skipped_not_fatal(self):
+        groups = [{"groupId": 1}, {"groupId": 2}]
+        ok_body = json.dumps({"results": [{"productId": 200, "marketPrice": 3.0}]}).encode()
+
+        def fake_fetch(url):
+            if "/1/prices" in url:
+                raise RuntimeError("network down")
+            return ok_body
+
+        with patch("lorcana_mcp.api._cache.get", return_value=None), \
+             patch("lorcana_mcp.api.fetch_tcgcsv_groups", return_value=groups), \
+             patch("lorcana_mcp.api._fetch", side_effect=fake_fetch), \
+             patch("lorcana_mcp.api._cache.set"):
+            prices = fetch_tcgcsv_prices()
+        assert prices == {200: 3.0}
+
+    def test_rows_missing_price_or_id_skipped(self):
+        groups = [{"groupId": 1}]
+        body = json.dumps({"results": [
+            {"productId": 100, "marketPrice": None},
+            {"productId": None, "marketPrice": 5.0},
+            {"productId": 200, "marketPrice": 3.0},
+        ]}).encode()
+
+        with patch("lorcana_mcp.api._cache.get", return_value=None), \
+             patch("lorcana_mcp.api.fetch_tcgcsv_groups", return_value=groups), \
+             patch("lorcana_mcp.api._fetch", return_value=body), \
+             patch("lorcana_mcp.api._cache.set"):
+            prices = fetch_tcgcsv_prices()
+        assert prices == {200: 3.0}
+
+
+class TestCheapestPriceForCard:
+    def test_returns_lowest_price_across_printings(self):
+        lj_cards = [
+            {"fullName": "Goofy - Musketeer", "externalLinks": {"tcgPlayerId": 1}},
+            {"fullName": "Goofy - Musketeer", "externalLinks": {"tcgPlayerId": 2}},
+        ]
+        price_by_pid = {1: 5.0, 2: 1.5}
+        assert cheapest_price_for_card("Goofy - Musketeer", lj_cards, price_by_pid) == 1.5
+
+    def test_no_matching_card_returns_none(self):
+        lj_cards = [{"fullName": "Elsa - Snow Queen", "externalLinks": {"tcgPlayerId": 1}}]
+        assert cheapest_price_for_card("Goofy - Musketeer", lj_cards, {1: 5.0}) is None
+
+    def test_no_price_data_returns_none(self):
+        lj_cards = [{"fullName": "Goofy - Musketeer", "externalLinks": {"tcgPlayerId": 1}}]
+        assert cheapest_price_for_card("Goofy - Musketeer", lj_cards, {}) is None
+
+    def test_missing_external_links_ignored(self):
+        lj_cards = [{"fullName": "Goofy - Musketeer"}]
+        assert cheapest_price_for_card("Goofy - Musketeer", lj_cards, {1: 5.0}) is None

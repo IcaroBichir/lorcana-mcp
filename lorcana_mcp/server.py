@@ -10,9 +10,10 @@ from .api import (
     fetch_duels_ink, build_duels_lookup, DUELS_FORMAT_LABELS,
     fetch_lorcana_json, filter_cards, _card_colors, resolve_card as _resolve_card,
     singer_value, is_song, find_song_singers,
+    fetch_tcgcsv_prices, cheapest_price_for_card,
 )
 from .enricher import enrich_csv as _enrich_csv, audit_csv as _audit_csv, _num_int
-from .deck import analyze_deck as _analyze_deck
+from .deck import analyze_deck as _analyze_deck, what_am_i_missing as _what_am_i_missing
 
 mcp = FastMCP(
     "Lorcana",
@@ -22,7 +23,8 @@ mcp = FastMCP(
         "search the full card pool by filters, find characters that can sing a given song, "
         "filter a collection by play format, "
         "audit an enriched collection for stale or wrong card data, "
-        "or analyze a deck list for curve, composition, and format legality."
+        "analyze a deck list for curve, composition, and format legality, "
+        "or check a deck list against your collection for what's missing and its cost to complete."
     ),
 )
 
@@ -711,6 +713,87 @@ def analyze_deck(deck_list: str) -> str:
             "\nUnrecognized card names (excluded from stats above):\n" +
             "\n".join(f"  {u['qty']}x {u['name']}" for u in result["unresolved"])
         )
+
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def what_am_i_missing(deck_list: str, collection_csv: str) -> str:
+    """
+    Compare a deck list against your collection: what you own, what's missing,
+    and the estimated cost to complete it.
+
+    Cross-references a raw deck list (same format as analyze_deck: `4x Card
+    Name` per line) against an enriched collection CSV. For every card you're
+    short on, fetches live TCGPlayer market prices from tcgcsv.com (cheapest
+    printing across all sets/rarities — gameplay is identical regardless of
+    rarity or art) and sums them into a completion cost estimate. Price data
+    is cached for 24h, so the first call in a while takes a bit longer while
+    it warms the cache.
+
+    Args:
+        deck_list: Raw deck list text, one card per line (e.g. "4x Goofy - Musketeer").
+        collection_csv: Absolute path to an enriched Lorcana collection CSV.
+    """
+    try:
+        owned_counts = _load_owned_counts(collection_csv)
+    except FileNotFoundError as e:
+        return f"Error: {e}"
+
+    result = _what_am_i_missing(deck_list, owned_counts)
+
+    if not result["entries"] and not result["unresolved"]:
+        return 'No cards found in deck list. Expected one card per line, e.g. "4x Goofy - Musketeer".'
+
+    have_fully = [e for e in result["entries"] if e["missing"] == 0]
+    short = [e for e in result["entries"] if e["missing"] > 0]
+
+    lines = [f"**Deck completion check** — {len(result['entries'])} unique card(s)\n"]
+
+    if have_fully:
+        lines.append(f"### Already have ({len(have_fully)})")
+        for e in have_fully:
+            lines.append(f"- {e['name']} — need {e['needed']}, own {e['owned']}")
+        lines.append("")
+
+    if short:
+        lines.append(f"### Missing or short ({len(short)})")
+
+        try:
+            lj_cards = fetch_lorcana_json()
+            price_by_pid = fetch_tcgcsv_prices()
+            prices_available = True
+        except Exception:
+            lj_cards, price_by_pid, prices_available = [], {}, False
+
+        total_cost = 0.0
+        priced_count = 0
+        for e in short:
+            price = cheapest_price_for_card(e["name"], lj_cards, price_by_pid) if prices_available else None
+            if price is not None:
+                total_cost += price * e["missing"]
+                priced_count += 1
+                cost_str = f"${price * e['missing']:.2f}"
+            else:
+                cost_str = "price unknown"
+            lines.append(
+                f"- {e['name']} — need {e['needed']}, own {e['owned']}, "
+                f"missing {e['missing']} ({cost_str})"
+            )
+        lines.append("")
+
+        if priced_count:
+            note = "" if priced_count == len(short) else f" ({len(short) - priced_count} card(s) had no price data)"
+            lines.append(f"**Estimated cost to complete: ${total_cost:.2f}**{note}")
+            lines.append("_Live TCGPlayer snapshot via tcgcsv.com — treat as an estimate, not a quote._")
+        elif not prices_available:
+            lines.append("_Could not fetch live TCGPlayer prices — cost estimate unavailable._")
+        lines.append("")
+
+    if result["unresolved"]:
+        lines.append("### Unrecognized card names")
+        for u in result["unresolved"]:
+            lines.append(f"- {u['qty']}x {u['name']}")
 
     return "\n".join(lines)
 

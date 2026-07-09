@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.8 — 2026-07-09
+
+Add `what_am_i_missing` tool: cross-references a deck list against an enriched collection CSV, splitting cards into "already have" and "missing or short," then fetches live TCGPlayer prices from tcgcsv.com for anything missing (cheapest printing across all sets, cached 24h) and sums them into a completion cost estimate.
+
+Also fixes a latent bug found while integrating tcgcsv.com: the shared `_fetch()` HTTP helper sent the default `Python-urllib/x.y` User-Agent, which tcgcsv.com rejects with a 401. Added a `lorcana-mcp/1.0` UA to all outgoing requests.
+
 ## 0.1.7 — 2026-07-08
 
 Add `find_song_synergies` tool: given a song (fuzzy-resolved by name) or a raw cost threshold, lists every Character that can sing it — either by printed cost alone or via a Singer X keyword — split into a Singer "discount" group (highest Singer value, then cheapest actual cost) and a plain cost-qualifiers group (cheapest first). Supports an ink color filter and an optional `collection_csv` to flag owned copies.
