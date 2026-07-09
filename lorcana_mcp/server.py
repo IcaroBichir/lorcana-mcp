@@ -9,13 +9,15 @@ from .api import (
     fetch_duels_ink, build_duels_lookup, DUELS_FORMAT_LABELS,
 )
 from .enricher import enrich_csv as _enrich_csv, audit_csv as _audit_csv, _num_int
+from .deck import analyze_deck as _analyze_deck
 
 mcp = FastMCP(
     "Lorcana",
     instructions=(
         "Use these tools to enrich Disney Lorcana TCG collection exports from TCGPlayer, "
         "look up individual card data, filter a collection by play format, "
-        "or audit an enriched collection for stale or wrong card data."
+        "audit an enriched collection for stale or wrong card data, "
+        "or analyze a deck list for curve, composition, and format legality."
     ),
 )
 
@@ -344,6 +346,70 @@ def audit_csv(csv_path: str) -> str:
             current_card = issue["card"]
             lines.append(f"\n{current_card}")
         lines.append(f"  {issue['field']}: \"{issue['csv_value']}\" → \"{issue['api_value']}\"")
+
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def analyze_deck(deck_list: str) -> str:
+    """
+    Analyze a raw deck list and return curve, composition, and legality stats.
+
+    Accepts one card per line, e.g. "4x Goofy - Musketeer" or "4 Goofy - Musketeer"
+    (both "4x" and "4 " are accepted; qty is optional and defaults to 1).
+    Lines starting with "#" or "//" are treated as comments and skipped.
+
+    Reports: ink curve (1-2/3-4/5-6/7+ cost brackets), inkable vs. uninkable count,
+    color split, card type split, an estimated lore-per-turn (sum of Character lore
+    values), a Core Constructed legality check (60-card minimum, max 4 copies of any
+    card, at most 2 ink colors), and any card names that couldn't be resolved.
+
+    Args:
+        deck_list: Raw deck list text, one card per line.
+    """
+    result = _analyze_deck(deck_list)
+
+    if result["total_cards"] == 0:
+        return "No cards found in deck list. Expected one card per line, e.g. \"4x Goofy - Musketeer\"."
+
+    curve = result["curve"]
+    curve_line = " | ".join(f"{b}: {curve[b]}" for b in ("1-2", "3-4", "5-6", "7+"))
+
+    color_lines = "\n".join(
+        f"  {c}: {n}" for c, n in sorted(result["color_counts"].items(), key=lambda x: -x[1])
+    ) or "  —"
+    type_lines = "\n".join(
+        f"  {t}: {n}" for t, n in sorted(result["type_counts"].items(), key=lambda x: -x[1])
+    ) or "  —"
+
+    legality = result["legality"]
+    legality_lines = [
+        f"  {'✓' if legality['min_60_cards'] else '✗'} Minimum 60 cards ({result['total_cards']} total)",
+        f"  {'✓' if legality['max_4_copies'] else '✗'} Max 4 copies per card"
+        + ("" if legality["max_4_copies"] else
+           " — over limit: " + ", ".join(f"{n}x {c}" for c, n in legality["over_limit_cards"])),
+        f"  {'✓' if legality['two_ink_colors_or_fewer'] else '✗'} At most 2 ink colors"
+        + f" (used: {', '.join(legality['ink_colors_used']) or '—'})",
+    ]
+
+    lines = [
+        f"**Deck analysis** — {result['total_cards']} cards ({result['unique_cards']} unique)\n",
+        f"Ink curve: {curve_line}",
+        f"Inkable: {result['inkable_count']}  |  Uninkable: {result['uninkable_count']}",
+        f"Estimated lore/turn (all questors): {result['lore_per_turn']}\n",
+        "Color split:",
+        color_lines,
+        "\nCard types:",
+        type_lines,
+        "\nCore Constructed legality:",
+        "\n".join(legality_lines),
+    ]
+
+    if result["unresolved"]:
+        lines.append(
+            "\nUnrecognized card names (excluded from stats above):\n" +
+            "\n".join(f"  {u['qty']}x {u['name']}" for u in result["unresolved"])
+        )
 
     return "\n".join(lines)
 

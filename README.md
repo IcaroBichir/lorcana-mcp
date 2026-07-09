@@ -12,7 +12,7 @@ MCP server that connects Claude to Disney Lorcana card data. Export your collect
 
 ## Tools
 
-Four tools are available in Claude once the server is running:
+Five tools are available in Claude once the server is running:
 
 | Tool                | What it does |
 |---------------------|---|
@@ -20,6 +20,7 @@ Four tools are available in Claude once the server is running:
 | `lookup_card`       | Looks up any card by name. Returns full stats, ability text, format legality, and card image URL. |
 | `filter_collection` | Filters your collection to cards legal in a given format: `core`, `infinity`, `core_zh`, `core_ja`, or `poorcana`. |
 | `audit_csv`         | Compares an enriched collection against live API data and reports any stale or wrong fields. |
+| `analyze_deck`      | Analyzes a raw deck list (`4x Card Name` per line) for ink curve, inkable split, color split, card types, estimated lore/turn, and Core Constructed legality (60-card min, max 4 copies, ≤2 ink colors). |
 
 ---
 
@@ -127,6 +128,14 @@ Core/Infinity/regional legality comes from [duels.ink](https://duels.ink), which
 > "Audit my collection at /Users/me/lorcana/enriched_collection.csv"
 
 Useful after a new set releases or if a card's data looks wrong. Compares every non-promo card against live API data and reports field-by-field discrepancies.
+
+### Analyze a deck list
+
+> "Analyze this deck: 4x Goofy - Musketeer, 4x Elsa - Spirit of Winter, ..." (paste a full list, one card per line)
+
+Accepts `4x Card Name` or `4 Card Name`; quantity defaults to 1 if omitted. Lines starting with `#` or `//` are treated as comments.
+
+Returns: ink curve (1-2/3-4/5-6/7+ cost brackets), inkable vs. uninkable count, color split, card type split, an estimated lore-per-turn (sum of Character lore values), a Core Constructed legality check (60-card minimum, max 4 copies of any card, at most 2 ink colors), and any card names that couldn't be resolved.
 
 ---
 

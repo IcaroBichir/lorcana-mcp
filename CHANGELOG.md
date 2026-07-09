@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4 — 2026-07-08
+
+Add `analyze_deck` tool: given a raw deck list (one card per line, `4x Card Name` format), reports ink curve (1-2/3-4/5-6/7+ brackets), inkable vs. uninkable count, color split (dual-ink cards tracked as combined keys), card type split, estimated lore-per-turn, a Core Constructed legality check (60-card minimum, max 4 copies, ≤2 ink colors), and any unresolved card names.
+
 ## 0.1.3 — 2026-07-02
 
 Add MCP Registry and mcp.so badges and "Listed on" directory table to README.

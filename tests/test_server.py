@@ -15,7 +15,7 @@ import pytest
 def test_all_tools_registered():
     from lorcana_mcp.server import mcp
     names = {t.name for t in mcp._tool_manager.list_tools()}
-    assert names == {"enrich_csv", "lookup_card", "filter_collection", "audit_csv"}
+    assert names == {"enrich_csv", "lookup_card", "filter_collection", "audit_csv", "analyze_deck"}
 
 
 # ── filter_collection — poorcana (no network needed) ──────────────────────────
@@ -111,3 +111,11 @@ def test_audit_csv_missing_file():
     from lorcana_mcp.server import audit_csv
     result = audit_csv("/nonexistent/path.csv")
     assert "Error" in result
+
+
+# ── analyze_deck — empty list (no network needed) ──────────────────────────────
+
+def test_analyze_deck_empty_list():
+    from lorcana_mcp.server import analyze_deck
+    result = analyze_deck("")
+    assert "No cards found" in result
