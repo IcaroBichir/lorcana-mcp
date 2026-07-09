@@ -8,12 +8,14 @@ from mcp.server.fastmcp import FastMCP
 from .api import (
     search_card, abilities_from_lj, LJCODE_TO_SETNAME, SETNAME_TO_LJCODE,
     fetch_duels_ink, build_duels_lookup, DUELS_FORMAT_LABELS,
-    fetch_lorcana_json, filter_cards, _card_colors, resolve_card as _resolve_card,
+    fetch_lorcana_json, fetch_lorcana_sets, filter_cards, filter_by_format,
+    _card_colors, resolve_card as _resolve_card,
     singer_value, is_song, find_song_singers,
     fetch_tcgcsv_prices, cheapest_price_for_card,
 )
 from .enricher import enrich_csv as _enrich_csv, audit_csv as _audit_csv, _num_int
 from .deck import analyze_deck as _analyze_deck, what_am_i_missing as _what_am_i_missing
+from .deckbuilder import build_candidate_pool, allocate_deck, rotation_safe_set_codes, summarize_picks
 
 mcp = FastMCP(
     "Lorcana",
@@ -24,7 +26,9 @@ mcp = FastMCP(
         "filter a collection by play format, "
         "audit an enriched collection for stale or wrong card data, "
         "analyze a deck list for curve, composition, and format legality, "
-        "or check a deck list against your collection for what's missing and its cost to complete."
+        "check a deck list against your collection for what's missing and its cost to complete, "
+        "or automatically build a legal decklist for an ink pair/format from your collection, "
+        "an ideal deck priced to complete, or the full market-price build."
     ),
 )
 
@@ -69,6 +73,60 @@ def _load_collection_csv(csv_path: str) -> tuple[dict[str, int], dict[str, float
 def _load_owned_counts(csv_path: str) -> dict[str, int]:
     """Product Name (promo suffix stripped) -> total owned quantity."""
     return _load_collection_csv(csv_path)[0]
+
+
+def _price_missing_entries(entries: list[dict], owned_prices: dict[str, float]) -> dict:
+    """Price each {"name","needed","owned","missing"} entry: prefer the
+    collection CSV's own cheapest known price, else a live tcgcsv.com lookup
+    (only fetched if at least one entry needs it — and only fetched once).
+
+    Order-preserving: `entries` in the result carries `unit_price`/
+    `line_cost` (None if unpriced) in the same order as the input, so
+    callers can print one line per entry the way what_am_i_missing does.
+    `priced`/`unpriced` are convenience subsets for summary counts.
+    """
+    needs_live_price = any(e["name"].lower() not in owned_prices for e in entries)
+    lj_cards, price_by_pid, live_price_failed = [], {}, False
+    if needs_live_price:
+        try:
+            lj_cards = fetch_lorcana_json()
+            price_by_pid = fetch_tcgcsv_prices()
+        except Exception:
+            live_price_failed = True
+
+    priced_entries: list[dict] = []
+    total_cost = 0.0
+    used_local_price = False
+    used_live_price = False
+
+    for e in entries:
+        local_price = owned_prices.get(e["name"].lower())
+        if local_price is not None:
+            price = local_price
+            used_local_price = True
+        elif not live_price_failed:
+            price = cheapest_price_for_card(e["name"], lj_cards, price_by_pid)
+            if price is not None:
+                used_live_price = True
+        else:
+            price = None
+
+        if price is not None:
+            line_cost = price * e["missing"]
+            total_cost += line_cost
+            priced_entries.append({**e, "unit_price": price, "line_cost": line_cost})
+        else:
+            priced_entries.append({**e, "unit_price": None, "line_cost": None})
+
+    return {
+        "entries": priced_entries,
+        "priced": [e for e in priced_entries if e["unit_price"] is not None],
+        "unpriced": [e for e in priced_entries if e["unit_price"] is None],
+        "total_cost": total_cost,
+        "used_local_price": used_local_price,
+        "used_live_price": used_live_price,
+        "live_price_failed": live_price_failed,
+    }
 
 
 @mcp.tool()
@@ -791,57 +849,29 @@ def what_am_i_missing(deck_list: str, collection_csv: str) -> str:
     if short:
         lines.append(f"### Missing or short ({len(short)})")
 
-        # Only reach for live pricing if some card isn't already priced locally.
-        needs_live_price = any(e["name"].lower() not in owned_prices for e in short)
-        lj_cards, price_by_pid, live_price_failed = [], {}, False
-        if needs_live_price:
-            try:
-                lj_cards = fetch_lorcana_json()
-                price_by_pid = fetch_tcgcsv_prices()
-            except Exception:
-                live_price_failed = True
-
-        total_cost = 0.0
-        priced_count = 0
-        used_local_price = False
-        used_live_price = False
-        for e in short:
-            local_price = owned_prices.get(e["name"].lower())
-            if local_price is not None:
-                price = local_price
-                used_local_price = True
-            elif not live_price_failed:
-                price = cheapest_price_for_card(e["name"], lj_cards, price_by_pid)
-                if price is not None:
-                    used_live_price = True
-            else:
-                price = None
-
-            if price is not None:
-                total_cost += price * e["missing"]
-                priced_count += 1
-                cost_str = f"${price * e['missing']:.2f}"
-            else:
-                cost_str = "price unknown"
+        priced = _price_missing_entries(short, owned_prices)
+        for e in priced["entries"]:
+            cost_str = f"${e['line_cost']:.2f}" if e["unit_price"] is not None else "price unknown"
             lines.append(
                 f"- {e['name']} — need {e['needed']}, own {e['owned']}, "
                 f"missing {e['missing']} ({cost_str})"
             )
         lines.append("")
 
+        priced_count = len(priced["priced"])
         if priced_count:
             note = "" if priced_count == len(short) else f" ({len(short) - priced_count} card(s) had no price data)"
-            lines.append(f"**Estimated cost to complete: ${total_cost:.2f}**{note}")
-            if used_local_price and used_live_price:
+            lines.append(f"**Estimated cost to complete: ${priced['total_cost']:.2f}**{note}")
+            if priced["used_local_price"] and priced["used_live_price"]:
                 lines.append(
                     "_Prices from your collection where you already own a printing; "
                     "live TCGPlayer snapshot (tcgcsv.com) for the rest — treat as an estimate, not a quote._"
                 )
-            elif used_live_price:
+            elif priced["used_live_price"]:
                 lines.append("_Live TCGPlayer snapshot via tcgcsv.com — treat as an estimate, not a quote._")
             else:
                 lines.append("_Prices from your own collection CSV._")
-        elif live_price_failed:
+        elif priced["live_price_failed"]:
             lines.append("_Could not fetch live TCGPlayer prices — cost estimate unavailable._")
         lines.append("")
 
@@ -849,6 +879,289 @@ def what_am_i_missing(deck_list: str, collection_csv: str) -> str:
         lines.append("### Unrecognized card names")
         for u in result["unresolved"]:
             lines.append(f"- {u['qty']}x {u['name']}")
+
+    return "\n".join(lines)
+
+
+_BUILD_DECK_DISCLAIMER = (
+    "_This is a heuristic curve/keyword-value deck builder — it optimizes ink curve, "
+    "stat efficiency, and keyword value, but it does not detect multi-card combos or "
+    "synergy packages (e.g. the Merlin/Mim Bounce Loop, the Steelsong package — see "
+    "CLAUDE.md's \"Key combos and synergies\"). Review the decklist before playing; "
+    "swap in known synergy pieces manually._"
+)
+
+
+@mcp.tool()
+def build_deck(
+    ink_colors: str,
+    mode: str = "ideal",
+    format: str = "core",
+    collection_csv: str = "",
+    rotation_safe: bool = False,
+) -> str:
+    """
+    Automatically assemble a legal, curve-balanced ~60-card decklist for an
+    ink pair and format, in one of 3 modes:
+
+    - "collection": build only from cards you own (capped at owned quantity
+      per card). If fewer than 60 legal owned cards exist, reports the
+      shortfall honestly instead of padding with irrelevant fillers.
+    - "ideal": build the best deck regardless of ownership. If
+      collection_csv is given, also shows what you already own, what's
+      missing, and the price to complete it (via tcgcsv.com).
+    - "market": build the best deck ignoring any collection, and prices
+      every card in it (not just the gap) via tcgcsv.com.
+
+    This is a heuristic curve/keyword-value builder — it optimizes ink
+    curve, stat efficiency, and keyword value, not multi-card combos or
+    synergy packages. See the disclaimer at the bottom of every result.
+
+    Args:
+        ink_colors: Comma-separated ink color(s), e.g. "Amber,Sapphire".
+                    1-2 colors for core/core_zh/core_ja/poorcana, 1-6 for infinity.
+        mode: "collection", "ideal", or "market".
+        format: "core", "infinity", "core_zh", "core_ja", or "poorcana".
+        collection_csv: Absolute path to an enriched collection CSV. Required
+                        for mode="collection"; optional for "ideal"; ignored for "market".
+        rotation_safe: If True and format="core", restrict to the rotation
+                       group that will still be legal after the next
+                       rotation event. No-op (with a note) for other formats.
+    """
+    valid_inks = {
+        "amber": "Amber", "amethyst": "Amethyst", "emerald": "Emerald",
+        "ruby": "Ruby", "sapphire": "Sapphire", "steel": "Steel",
+    }
+    valid_modes = {"collection", "ideal", "market"}
+    valid_formats = {"core", "infinity", "core_zh", "core_ja", "poorcana"}
+
+    mode = mode.lower().strip()
+    fmt = format.lower().strip()
+
+    if mode not in valid_modes:
+        return f'Unknown mode "{mode}". Valid options: {", ".join(sorted(valid_modes))}.'
+    if fmt not in valid_formats:
+        return f'Unknown format "{format}". Valid options: {", ".join(sorted(valid_formats))}.'
+
+    raw_colors = [c.strip().lower() for c in ink_colors.split(",") if c.strip()]
+    if not raw_colors:
+        return 'Provide at least one ink color, e.g. "Amber,Sapphire".'
+    unknown = [c for c in raw_colors if c not in valid_inks]
+    if unknown:
+        return f'Unknown ink color(s): {", ".join(unknown)}. Valid: {", ".join(sorted(valid_inks.values()))}.'
+
+    max_colors = 6 if fmt == "infinity" else 2
+    if len(raw_colors) > max_colors:
+        return (
+            f'{DUELS_FORMAT_LABELS.get(fmt, fmt)} allows at most {max_colors} '
+            f'ink color(s), got {len(raw_colors)}.'
+        )
+
+    colors = [valid_inks[c] for c in raw_colors]
+    colors_display = "/".join(colors)
+    fmt_label = DUELS_FORMAT_LABELS.get(fmt, fmt.capitalize() if fmt == "poorcana" else fmt)
+
+    if mode == "collection" and not collection_csv:
+        return 'mode="collection" requires collection_csv (absolute path to your enriched collection CSV).'
+
+    owned_counts: dict[str, int] = {}
+    owned_prices: dict[str, float] = {}
+    if collection_csv and mode != "market":
+        try:
+            owned_counts, owned_prices = _load_collection_csv(collection_csv)
+        except FileNotFoundError as e:
+            return f"Error: {e}"
+
+    try:
+        lj_cards = fetch_lorcana_json()
+    except Exception as e:
+        return f"Failed to fetch card data: {e}"
+
+    duels_lookup = None
+    if fmt != "poorcana":
+        try:
+            duels_lookup = build_duels_lookup(fetch_duels_ink())
+        except Exception as e:
+            return f"Failed to fetch duels.ink legality data: {e}"
+
+    rotation_note = ""
+    rotation_safe_codes = None
+    if rotation_safe:
+        if fmt == "core":
+            try:
+                rotation_safe_codes = rotation_safe_set_codes(fetch_lorcana_sets())
+            except Exception as e:
+                return f"Failed to fetch rotation data: {e}"
+            if not rotation_safe_codes:
+                return "Could not determine a rotation-safe set pool from current rotation data."
+        else:
+            rotation_note = f"_rotation_safe is a Core-only concept — ignored for {fmt_label}._\n"
+
+    pool = build_candidate_pool(
+        lj_cards, colors, fmt,
+        duels_lookup=duels_lookup,
+        rotation_safe_codes=rotation_safe_codes,
+        owned_counts=owned_counts if mode == "collection" else None,
+    )
+
+    if not pool:
+        owned_note = " from your collection" if mode == "collection" else ""
+        return f"No {colors_display} cards are legal in {fmt_label}{owned_note}."
+
+    def _collection_max_copies(card: dict) -> int:
+        return min(4, owned_counts.get((card.get("fullName") or "").lower(), 0))
+
+    max_copies_fn = _collection_max_copies if mode == "collection" else None
+    picks = allocate_deck(pool, max_copies_fn=max_copies_fn)
+    total_cards = sum(qty for _, qty in picks)
+
+    if not picks:
+        return f"Could not assemble any legal cards for {colors_display} {fmt_label}."
+
+    sorted_picks = sorted(picks, key=lambda p: (p[0].get("cost") or 0, p[0].get("fullName", "")))
+
+    lines = [f"**Built deck** — {colors_display} · {fmt_label} · {mode} mode\n"]
+
+    if rotation_note:
+        lines.append(rotation_note)
+
+    lines.append(f"### Decklist ({total_cards} cards)")
+    lines.append("| Cost | Card | Type | Qty |")
+    lines.append("|------|------|------|-----|")
+    for card, qty in sorted_picks:
+        ctype = card.get("type", "—")
+        if ctype == "Action" and "Song" in (card.get("subtypes") or []):
+            ctype = "Action - Song"
+        lines.append(f"| {card.get('cost', '—')} | {card.get('fullName', '—')} | {ctype} | {qty} |")
+    lines.append("")
+
+    lines.append("### duels.ink import")
+    lines.append("```")
+    lines.extend(f"{qty}x {card.get('fullName', '')}" for card, qty in sorted_picks)
+    lines.append("```")
+    lines.append("")
+
+    stats = summarize_picks(sorted_picks)
+    curve = stats["curve"]
+    lines.append("### Stats")
+    lines.append(
+        f"- Curve: 1-2⬡ {curve['1-2']} · 3-4⬡ {curve['3-4']} · "
+        f"5-6⬡ {curve['5-6']} · 7+⬡ {curve['7+']}"
+    )
+    lines.append(f"- Inkable: {stats['inkable_count']} · Uninkable: {stats['uninkable_count']}")
+    lines.append(f"- Colors: {', '.join(f'{k} {v}' for k, v in stats['color_counts'].items())}")
+    lines.append(f"- Types: {', '.join(f'{k} {v}' for k, v in stats['type_counts'].items())}")
+    lines.append(f"- Estimated lore/turn (all questors): {stats['lore_per_turn']}")
+
+    format_min_cards = 50 if fmt == "poorcana" else 60
+    lines.append(
+        f"- {'OK' if total_cards >= format_min_cards else 'SHORT'}: "
+        f"minimum {format_min_cards} cards ({total_cards} built)"
+    )
+    lines.append(
+        f"- {'OK' if len(colors) <= max_colors else 'OVER'}: "
+        f"at most {max_colors} ink color(s) ({len(colors)} used)"
+    )
+    lines.append("")
+
+    if mode == "collection":
+        lines.append("### Collection coverage")
+        if total_cards >= 60:
+            lines.append(f"All {total_cards} cards drawn from your collection — nothing to buy.")
+        else:
+            lines.append(
+                f"Built {total_cards}/60 cards — no more legal, owned {colors_display} cards "
+                f"available for {fmt_label}. Buy more copies of cards above, or other legal "
+                "cards, to reach 60."
+            )
+        lines.append("")
+
+    elif mode == "ideal":
+        if collection_csv:
+            # Built directly from sorted_picks rather than deck.what_am_i_missing() —
+            # we already have the exact resolved card dicts, so there's no fuzzy
+            # name resolution to redo (unlike the what_am_i_missing tool, which has
+            # to fuzzy-resolve a user's raw pasted decklist text).
+            diff_entries = [
+                {
+                    "name": card.get("fullName", ""),
+                    "needed": qty,
+                    "owned": owned_counts.get((card.get("fullName") or "").lower(), 0),
+                    "missing": max(qty - owned_counts.get((card.get("fullName") or "").lower(), 0), 0),
+                }
+                for card, qty in sorted_picks
+            ]
+            have_fully = [e for e in diff_entries if e["missing"] == 0]
+            short = [e for e in diff_entries if e["missing"] > 0]
+
+            lines.append("### Ownership & cost to complete")
+            lines.append(f"Already own {len(have_fully)}/{len(diff_entries)} unique cards in full.")
+            if short:
+                priced = _price_missing_entries(short, owned_prices)
+                lines.append(f"\n**Missing or short ({len(short)}):**")
+                for e in priced["entries"]:
+                    cost_str = f"${e['line_cost']:.2f}" if e["unit_price"] is not None else "price unknown"
+                    lines.append(
+                        f"- {e['name']} — need {e['needed']}, own {e['owned']}, "
+                        f"missing {e['missing']} ({cost_str})"
+                    )
+                priced_count = len(priced["priced"])
+                if priced_count:
+                    note = "" if priced_count == len(short) else (
+                        f" ({len(short) - priced_count} card(s) had no price data)"
+                    )
+                    lines.append(f"\n**Estimated cost to complete: ${priced['total_cost']:.2f}**{note}")
+                    if priced["used_local_price"] and priced["used_live_price"]:
+                        lines.append(
+                            "_Prices from your collection where you already own a printing; "
+                            "live TCGPlayer snapshot (tcgcsv.com) for the rest — "
+                            "treat as an estimate, not a quote._"
+                        )
+                    elif priced["used_live_price"]:
+                        lines.append(
+                            "_Live TCGPlayer snapshot via tcgcsv.com — treat as an estimate, not a quote._"
+                        )
+                    else:
+                        lines.append("_Prices from your own collection CSV._")
+                elif priced["live_price_failed"]:
+                    lines.append("_Could not fetch live TCGPlayer prices — cost estimate unavailable._")
+            else:
+                lines.append("You already own every card in this deck.")
+            lines.append("")
+        else:
+            lines.append(
+                "_Pass collection_csv to see what you already own and the price to complete this deck._\n"
+            )
+
+    else:  # market
+        if collection_csv:
+            lines.append(
+                "_collection_csv was ignored — market mode prices the full deck "
+                "regardless of ownership._\n"
+            )
+        entries = [
+            {"name": card.get("fullName", ""), "needed": qty, "owned": 0, "missing": qty}
+            for card, qty in sorted_picks
+        ]
+        priced = _price_missing_entries(entries, {})
+        lines.append("### Full deck cost")
+        if priced["priced"]:
+            note = "" if not priced["unpriced"] else f" ({len(priced['unpriced'])} card(s) had no price data)"
+            lines.append(f"**Estimated total: ${priced['total_cost']:.2f}**{note}")
+            lines.append(
+                "_Live TCGPlayer snapshot via tcgcsv.com, cheapest printing per card — "
+                "treat as an estimate, not a quote._"
+            )
+            if priced["unpriced"]:
+                lines.append("\nNo price data: " + ", ".join(e["name"] for e in priced["unpriced"]))
+        elif priced["live_price_failed"]:
+            lines.append("_Could not fetch live TCGPlayer prices — cost estimate unavailable._")
+        else:
+            lines.append("_No price data available for any card in this deck._")
+        lines.append("")
+
+    lines.append("---")
+    lines.append(_BUILD_DECK_DISCLAIMER)
 
     return "\n".join(lines)
 

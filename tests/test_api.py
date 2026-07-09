@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import pytest
 
@@ -29,6 +29,10 @@ from lorcana_mcp.api import (
     fetch_tcgcsv_groups,
     fetch_tcgcsv_prices,
     cheapest_price_for_card,
+    fetch_lorcana_json,
+    fetch_lorcana_sets,
+    lj_card_format_legal,
+    filter_by_format,
 )
 
 
@@ -645,6 +649,90 @@ class TestDedupeByFullName:
 
     def test_empty_list(self):
         assert dedupe_by_full_name([]) == []
+
+
+# ── fetch_lorcana_json / fetch_lorcana_sets (single-fetch refactor) ────────────────
+
+class TestFetchLorcanaJsonSharedFetch:
+    def test_cold_cache_calls_fetch_once_and_populates_both_keys(self):
+        body = json.dumps({
+            "cards": [{"fullName": "Goofy - Musketeer"}],
+            "sets": {"1": {"name": "The First Chapter"}},
+        }).encode()
+        with patch("lorcana_mcp.api._cache.get", return_value=None), \
+             patch("lorcana_mcp.api._fetch", return_value=body) as mock_fetch, \
+             patch("lorcana_mcp.api._cache.set") as mock_set:
+            cards = fetch_lorcana_json()
+        assert cards == [{"fullName": "Goofy - Musketeer"}]
+        mock_fetch.assert_called_once()
+        assert mock_set.call_args_list == [
+            call("lorcana_json", [{"fullName": "Goofy - Musketeer"}]),
+            call("lorcana_json_sets", {"1": {"name": "The First Chapter"}}),
+        ]
+
+    def test_fetch_lorcana_sets_cold_cache_also_single_fetch(self):
+        body = json.dumps({
+            "cards": [{"fullName": "Goofy - Musketeer"}],
+            "sets": {"1": {"name": "The First Chapter"}},
+        }).encode()
+        with patch("lorcana_mcp.api._cache.get", return_value=None), \
+             patch("lorcana_mcp.api._fetch", return_value=body) as mock_fetch, \
+             patch("lorcana_mcp.api._cache.set"):
+            sets_meta = fetch_lorcana_sets()
+        assert sets_meta == {"1": {"name": "The First Chapter"}}
+        mock_fetch.assert_called_once()
+
+    def test_warm_cache_skips_fetch(self):
+        with patch("lorcana_mcp.api._cache.get", return_value={"1": {"name": "Cached"}}), \
+             patch("lorcana_mcp.api._fetch") as mock_fetch:
+            sets_meta = fetch_lorcana_sets()
+        assert sets_meta == {"1": {"name": "Cached"}}
+        mock_fetch.assert_not_called()
+
+
+# ── lj_card_format_legal / filter_by_format ─────────────────────────────────────
+
+def _fmt_card(name, set_code="9", number=1, rarity="Common"):
+    return {"fullName": name, "setCode": set_code, "number": number, "rarity": rarity}
+
+
+class TestLjCardFormatLegal:
+    def test_core_legal_via_duels_lookup(self):
+        card = _fmt_card("Legal Card", set_code="9", number=1)
+        lookup = {("9", 1): {"legality": ["core", "infinity"]}}
+        assert lj_card_format_legal(card, "core", lookup) is True
+
+    def test_core_illegal_when_format_missing_from_legality(self):
+        card = _fmt_card("Infinity Only", set_code="1", number=1)
+        lookup = {("1", 1): {"legality": ["infinity"]}}
+        assert lj_card_format_legal(card, "core", lookup) is False
+
+    def test_illegal_when_not_in_duels_lookup(self):
+        card = _fmt_card("Unknown Card", set_code="99", number=1)
+        assert lj_card_format_legal(card, "core", {}) is False
+
+    def test_poorcana_ignores_duels_lookup_uses_rarity(self):
+        common = _fmt_card("Common Card", rarity="Common")
+        legendary = _fmt_card("Legendary Card", rarity="Legendary")
+        assert lj_card_format_legal(common, "poorcana", {}) is True
+        assert lj_card_format_legal(legendary, "poorcana", {}) is False
+
+    def test_missing_set_code_or_number_is_illegal(self):
+        assert lj_card_format_legal({"fullName": "No Set"}, "core", {}) is False
+
+
+class TestFilterByFormat:
+    def test_filters_to_legal_cards_only(self):
+        legal = _fmt_card("Legal", set_code="9", number=1)
+        illegal = _fmt_card("Illegal", set_code="1", number=2)
+        lookup = {("9", 1): {"legality": ["core"]}, ("1", 2): {"legality": ["infinity"]}}
+        result = filter_by_format([legal, illegal], "core", lookup)
+        assert result == [legal]
+
+    def test_poorcana_needs_no_duels_lookup(self):
+        common = _fmt_card("Common", rarity="Common")
+        result = filter_by_format([common], "poorcana")
+        assert result == [common]
 
 
 # ── tcgcsv pricing ────────────────────────────────────────────────────────────────

@@ -24,7 +24,7 @@ def _save(data: dict) -> None:
     _CACHE_FILE.write_text(json.dumps(data))
 
 
-def get(key: str) -> list | None:
+def get(key: str) -> dict | list | None:
     entry = _load().get(key)
     if not entry:
         return None
@@ -33,7 +33,7 @@ def get(key: str) -> list | None:
     return entry["cards"]
 
 
-def set(key: str, cards: list) -> None:
+def set(key: str, cards: dict | list) -> None:
     data = _load()
     data[key] = {"ts": time.time(), "cards": cards}
     _save(data)

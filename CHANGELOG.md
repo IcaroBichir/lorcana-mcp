@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0 — 2026-07-09
+
+Add `build_deck` tool: automatically assembles a legal, curve-balanced ~60-card decklist for an ink pair and format, in one of 3 modes — `collection` (only cards you own, copies capped at owned quantity, honest shortfall reporting instead of padding), `ideal` (best deck regardless of ownership, priced to complete against a collection CSV if given), or `market` (best deck, fully priced via tcgcsv.com, ownership ignored). It's a heuristic curve/keyword-value builder (ink-curve targets and per-card scoring from stat efficiency + keyword value), not a synergy/combo detector — every result says so.
+
+New supporting pieces: `lorcana_mcp/deckbuilder.py` (candidate-pool assembly, scoring, curve-target apportionment, greedy allocation, stats summary), `rotation_safe_set_codes()` (dynamically computes the newest Core-legal rotation group from LorcanaJSON's per-set metadata instead of a hardcoded "rotationGroup >= 3" — self-updates as rotation groups shift), and `filter_by_format()`/`lj_card_format_legal()` in `api.py` (format-legality filtering applied directly to the full card pool, not just a collection CSV row).
+
+Found and fixed two real bugs while building this:
+- `filter_cards()`'s ink-color filter uses ANY-match semantics (correct for search, since a dual-ink card should surface under either color) — but candidate-pool assembly for deck building needs SUBSET semantics (every color on the card must be within the chosen ink pair, or a Ruby/Emerald dual-ink card would wrongly be admitted into a Ruby/Amber deck). `build_candidate_pool()` implements its own subset check rather than reusing `filter_cards`.
+- The soft type-composition caps (Character≤24, Action≤16, Item≤8, Location≤4, from this repo's own composition guideline ranges) sum to only 52 — less than a 60-card deck — so treating them as hard caps made a full 60-card deck structurally unreachable whenever a color pair was thin on non-Character cards. Fixed by making the caps apply only to the primary curve-bucket-filling pass; a backfill pass ignores them (keeping only the 4-copy-per-card cap) so the real deck size is always reached when the pool allows it.
+
+Also found mid-implementation: `build_deck`'s stats block originally called the existing `deck.analyze_deck()` on its own generated decklist text, which re-resolves every card name via fuzzy matching against the full live card pool — pure overhead (and a real network hit) for names we'd already resolved exactly while building the deck. Replaced with `deckbuilder.summarize_picks()`, which computes the same curve/inkable/color/type/lore stats directly from the already-resolved `(card, qty)` picks. Cut a synthetic full-pool build from ~13s to well under 1s (warm cache). The `ideal`-mode ownership diff has the same fix — computed directly from `sorted_picks` instead of round-tripping through `deck.what_am_i_missing()`'s fuzzy resolution.
+
 ## 0.1.9 — 2026-07-09
 
 Add `refresh_prices` flag to `enrich_csv`: when set, overwrites each row's TCG Market Price with a live tcgcsv.com lookup for that exact printing (matched via the row's own Product ID), instead of leaving whatever the raw TCGPlayer export had at download time. Lets an old enriched CSV's prices be brought current without re-exporting from TCGPlayer. Report output now includes a "Prices refreshed: N/Total" line when used.

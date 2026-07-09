@@ -22,6 +22,7 @@ Once it's connected, you can just talk to Claude like:
 - 🎵 **"Who can sing Be Our Guest for free?"** — finds the best Singer combos for a song
 - 📋 **"Is this deck legal? 4x Goofy - Musketeer, 4x..."** — checks curve, colors, and tournament legality of any deck list
 - 💰 **"What am I missing to finish this deck, and what would it cost?"** — compares a deck list to your collection and prices the gap with live market data
+- 🏗️ **"Build me a Core Constructed Amber/Sapphire deck"** — automatically assembles a legal, curve-balanced decklist from your collection, an ideal build priced to complete, or a full market build
 - ✅ **"Is my collection data still accurate?"** — audits your CSV against live card data and flags anything stale
 
 Everything reads from public card APIs plus your own exported CSV — no account, no login, nothing to configure.
@@ -49,7 +50,7 @@ That's it — Claude does the rest. Everything below is reference detail for whe
 
 ## Tools
 
-Nine tools are available in Claude once the server is running:
+Ten tools are available in Claude once the server is running:
 
 | Tool                  | What it does |
 |-----------------------|---|
@@ -62,6 +63,7 @@ Nine tools are available in Claude once the server is running:
 | `audit_csv`           | Compares an enriched collection against live API data and reports any stale or wrong fields. |
 | `analyze_deck`        | Analyzes a raw deck list (`4x Card Name` per line) for ink curve, inkable split, color split, card types, estimated lore/turn, and Core Constructed legality (60-card min, max 4 copies, ≤2 ink colors). |
 | `what_am_i_missing`   | Compares a deck list against your collection: what you already own, what's missing or short, and a live TCGPlayer cost estimate (via tcgcsv.com) to complete it. |
+| `build_deck`          | Automatically assembles a legal, curve-balanced ~60-card decklist for an ink pair/format, in one of 3 modes: `collection` (only cards you own), `ideal` (best deck regardless of ownership, priced to complete if you pass a collection CSV), or `market` (best deck, fully priced, ignoring ownership). A heuristic curve/keyword-value builder, not a synergy/combo detector. |
 
 ---
 
@@ -340,15 +342,17 @@ If you're an AI agent (Claude or otherwise) with this MCP server connected, read
 | To sanity-check an enriched CSV against live data | `audit_csv` | — |
 | A decklist rated for curve, color balance, and legality | `analyze_deck` | — |
 | "What do I need to buy to finish this deck, and how much?" | `what_am_i_missing` | — |
+| "Build me a deck for [ink pair]" | `build_deck` — ask which of the 3 modes (`collection`/`ideal`/`market`) first if the user hasn't said | manually assembling a decklist from `search_cards` results |
 
 ### Hard rules
 
 1. **Always pass absolute paths** for `csv_path` / `input_path` / `collection_csv`. Relative paths resolve against the server process's cwd, not the user's — this fails silently or points at the wrong file. If you don't have an absolute path, ask the user or find the file first.
 2. **Default to `resolve_card` over `lookup_card`** unless the user gave you a name you're confident is exact and correctly spelled. When in doubt, `resolve_card` is strictly more forgiving and costs nothing extra.
-3. **Never hand-roll price lookups.** `find_song_synergies` and `what_am_i_missing` already call tcgcsv.com internally with 24h caching and cheapest-printing logic. Don't `curl` TCGPlayer or scrape prices yourself.
+3. **Never hand-roll price lookups.** `find_song_synergies`, `what_am_i_missing`, and `build_deck` already call tcgcsv.com internally with 24h caching and cheapest-printing logic. Don't `curl` TCGPlayer or scrape prices yourself.
 4. **Gameplay is identical across printings** (base, Enchanted, Epic, promo — same name, cost, stats, abilities). Every price-aware tool already picks the cheapest printing automatically; don't second-guess a suspiciously low result, and don't treat rarity as a gameplay signal.
 5. **If a user says data looks wrong or stale**, suggest `lorcana-mcp cache clear` before assuming a tool is broken — card and price data is cached 24h.
 6. **Ambiguous tool output is a feature, not an error.** `resolve_card` and `find_song_synergies` can return a ranked "did you mean" list instead of a single answer — present it to the user rather than guessing which one they meant.
+7. **`build_deck` is a curve/keyword-value heuristic, not a synergy engine.** It doesn't detect multi-card combos (Merlin/Mim bounce, Steelsong, etc.) — don't present its output as a finished, tournament-tuned decklist. Treat it as a strong starting point to review and adjust, not a final answer.
 
 ### Known gotchas (found the hard way — see CHANGELOG.md)
 

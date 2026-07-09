@@ -186,15 +186,29 @@ def fetch_lorcana_api() -> list[dict]:
     return cards
 
 
+def _fetch_lorcana_json_full() -> dict:
+    """Fetch the raw LorcanaJSON payload and populate both the cards and
+    sets-metadata cache entries from a single network call."""
+    data = json.loads(_fetch("https://lorcanajson.org/files/current/en/allCards.json"))
+    _cache.set("lorcana_json", data["cards"])
+    _cache.set("lorcana_json_sets", data["sets"])
+    return data
+
+
 def fetch_lorcana_json() -> list[dict]:
     """Fetch allCards from LorcanaJSON (cached 24h)."""
     cached = _cache.get("lorcana_json")
     if cached is not None:
         return cached
-    data = json.loads(_fetch("https://lorcanajson.org/files/current/en/allCards.json"))
-    cards = data["cards"]
-    _cache.set("lorcana_json", cards)
-    return cards
+    return _fetch_lorcana_json_full()["cards"]
+
+
+def fetch_lorcana_sets() -> dict:
+    """Fetch LorcanaJSON's per-set metadata (allowedInFormats/rotationGroup), cached 24h."""
+    cached = _cache.get("lorcana_json_sets")
+    if cached is not None:
+        return cached
+    return _fetch_lorcana_json_full()["sets"]
 
 
 def build_api_lookup(cards: list[dict]) -> dict:
@@ -266,6 +280,42 @@ DUELS_FORMAT_LABELS: dict[str, str] = {
     "core_zh":   "Core ZH",
     "core_ja":   "Core JA",
 }
+
+
+def lj_card_format_legal(card: dict, fmt: str, duels_lookup: dict) -> bool:
+    """True if a LorcanaJSON card is legal in the given format.
+
+    Poorcana is a local convention (Common/Uncommon rarity only), checked
+    straight off the LJ card's own `rarity` field — no duels.ink lookup
+    needed. Every other format cross-references duels.ink's `legality` list
+    by (setCode, number), the same check filter_collection already applies
+    per collection-CSV row, applied here directly to LJ cards (which already
+    carry setCode/number natively).
+    """
+    if fmt == "poorcana":
+        return (card.get("rarity") or "").strip() in ("Common", "Uncommon")
+    set_code = str(card.get("setCode", ""))
+    number = card.get("number")
+    if not set_code or number is None:
+        return False
+    try:
+        duels_card = duels_lookup.get((set_code, int(number)))
+    except (TypeError, ValueError):
+        return False
+    if duels_card is None:
+        return False
+    return fmt in duels_card.get("legality", [])
+
+
+def filter_by_format(cards: list[dict], fmt: str, duels_lookup: dict | None = None) -> list[dict]:
+    """Filter LorcanaJSON cards to those legal in the given format.
+
+    duels_lookup (build_duels_lookup(fetch_duels_ink())) is required for
+    core/infinity/core_zh/core_ja; unused for poorcana. Passed in rather
+    than fetched internally so a caller building several filtered views
+    (e.g. build_deck's candidate pool) only fetches duels.ink data once.
+    """
+    return [c for c in cards if lj_card_format_legal(c, fmt, duels_lookup or {})]
 
 
 def load_all_data() -> tuple[dict, dict, list[dict]]:
