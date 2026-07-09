@@ -372,6 +372,49 @@ class TestWhatAmIMissing:
         assert "Unrecognized card names" in result
         assert "2x Totally Fake Card" in result
 
+    def test_short_card_uses_local_csv_price_no_network_call(self, csv_file):
+        from lorcana_mcp.server import what_am_i_missing
+        path = csv_file([
+            {"Product Name": "Goofy - Musketeer", "Add to Quantity": "1", "TCG Market Price": "2.50"},
+        ])
+        with patch("lorcana_mcp.deck.search_card", return_value=_wam_card("Goofy - Musketeer")), \
+             patch("lorcana_mcp.server.fetch_lorcana_json") as mock_lj, \
+             patch("lorcana_mcp.server.fetch_tcgcsv_prices") as mock_prices:
+            result = what_am_i_missing("4x Goofy - Musketeer", path)
+        mock_lj.assert_not_called()
+        mock_prices.assert_not_called()
+        assert "missing 3" in result
+        assert "$7.50" in result  # 3 missing * $2.50
+        assert "Prices from your own collection CSV." in result
+
+    def test_local_price_is_cheapest_across_owned_printings(self, csv_file):
+        from lorcana_mcp.server import what_am_i_missing
+        path = csv_file([
+            {"Product Name": "Goofy - Musketeer", "Add to Quantity": "1", "TCG Market Price": "5.00"},
+            {"Product Name": "Goofy - Musketeer", "Add to Quantity": "1", "TCG Market Price": "1.25"},
+        ])
+        with patch("lorcana_mcp.deck.search_card", return_value=_wam_card("Goofy - Musketeer")), \
+             patch("lorcana_mcp.server.fetch_lorcana_json") as mock_lj:
+            result = what_am_i_missing("4x Goofy - Musketeer", path)
+        mock_lj.assert_not_called()
+        assert "$2.50" in result  # 2 missing * $1.25
+
+    def test_mixed_local_and_live_pricing_notes_both_sources(self, csv_file):
+        from lorcana_mcp.server import what_am_i_missing
+        path = csv_file([
+            {"Product Name": "Goofy - Musketeer", "Add to Quantity": "1", "TCG Market Price": "2.50"},
+        ])
+
+        def fake_search(name, set_name=""):
+            return _wam_card(name)
+
+        with patch("lorcana_mcp.deck.search_card", side_effect=fake_search), \
+             patch("lorcana_mcp.server.fetch_lorcana_json", return_value=[]), \
+             patch("lorcana_mcp.server.fetch_tcgcsv_prices", return_value={}), \
+             patch("lorcana_mcp.server.cheapest_price_for_card", return_value=1.0):
+            result = what_am_i_missing("4x Goofy - Musketeer\n2x Elsa - Spirit of Winter", path)
+        assert "live TCGPlayer snapshot" in result and "your collection where" in result
+
 
 # ── enrich_csv — missing file ──────────────────────────────────────────────────
 

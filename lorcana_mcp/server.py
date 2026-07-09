@@ -31,23 +31,44 @@ mcp = FastMCP(
 _PROMO_SUFFIX_RE = re.compile(r"\s*\([^)]*\)\s*$")
 
 
-def _load_owned_counts(csv_path: str) -> dict[str, int]:
-    """Product Name (promo suffix stripped) -> total owned quantity."""
+def _load_collection_csv(csv_path: str) -> tuple[dict[str, int], dict[str, float]]:
+    """Product Name (promo suffix stripped, lowercased) -> (owned qty, cheapest known price).
+
+    The price side lets callers reuse the enriched CSV's own TCG Market Price
+    column instead of hitting an external pricing API for cards already owned
+    — only cards owned at zero copies actually need a live lookup.
+    """
     counts: dict[str, int] = {}
+    prices: dict[str, float] = {}
     with open(csv_path, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             name = _PROMO_SUFFIX_RE.sub("", row.get("Product Name", "")).strip()
             if not name:
                 continue
+            key = name.lower()
+
             try:
                 qty = int(float(row.get("Add to Quantity", "0") or "0"))
             except ValueError:
                 qty = 0
-            if qty <= 0:
-                continue
-            key = name.lower()
-            counts[key] = counts.get(key, 0) + qty
-    return counts
+            if qty > 0:
+                counts[key] = counts.get(key, 0) + qty
+
+            price_str = row.get("TCG Market Price", "")
+            if price_str:
+                try:
+                    price = float(price_str)
+                    if key not in prices or price < prices[key]:
+                        prices[key] = price
+                except ValueError:
+                    pass
+
+    return counts, prices
+
+
+def _load_owned_counts(csv_path: str) -> dict[str, int]:
+    """Product Name (promo suffix stripped) -> total owned quantity."""
+    return _load_collection_csv(csv_path)[0]
 
 
 @mcp.tool()
@@ -725,18 +746,19 @@ def what_am_i_missing(deck_list: str, collection_csv: str) -> str:
 
     Cross-references a raw deck list (same format as analyze_deck: `4x Card
     Name` per line) against an enriched collection CSV. For every card you're
-    short on, fetches live TCGPlayer market prices from tcgcsv.com (cheapest
-    printing across all sets/rarities — gameplay is identical regardless of
-    rarity or art) and sums them into a completion cost estimate. Price data
-    is cached for 24h, so the first call in a while takes a bit longer while
-    it warms the cache.
+    short on, first checks the CSV's own TCG Market Price (you already own at
+    least one printing, so it's already there — no network needed). Only cards
+    you own zero copies of fall back to a live TCGPlayer lookup via tcgcsv.com
+    (cheapest printing across all sets/rarities — gameplay is identical
+    regardless of rarity or art). That fallback fetch only happens if at least
+    one card actually needs it, and its price data is cached 24h.
 
     Args:
         deck_list: Raw deck list text, one card per line (e.g. "4x Goofy - Musketeer").
         collection_csv: Absolute path to an enriched Lorcana collection CSV.
     """
     try:
-        owned_counts = _load_owned_counts(collection_csv)
+        owned_counts, owned_prices = _load_collection_csv(collection_csv)
     except FileNotFoundError as e:
         return f"Error: {e}"
 
@@ -759,17 +781,32 @@ def what_am_i_missing(deck_list: str, collection_csv: str) -> str:
     if short:
         lines.append(f"### Missing or short ({len(short)})")
 
-        try:
-            lj_cards = fetch_lorcana_json()
-            price_by_pid = fetch_tcgcsv_prices()
-            prices_available = True
-        except Exception:
-            lj_cards, price_by_pid, prices_available = [], {}, False
+        # Only reach for live pricing if some card isn't already priced locally.
+        needs_live_price = any(e["name"].lower() not in owned_prices for e in short)
+        lj_cards, price_by_pid, live_price_failed = [], {}, False
+        if needs_live_price:
+            try:
+                lj_cards = fetch_lorcana_json()
+                price_by_pid = fetch_tcgcsv_prices()
+            except Exception:
+                live_price_failed = True
 
         total_cost = 0.0
         priced_count = 0
+        used_local_price = False
+        used_live_price = False
         for e in short:
-            price = cheapest_price_for_card(e["name"], lj_cards, price_by_pid) if prices_available else None
+            local_price = owned_prices.get(e["name"].lower())
+            if local_price is not None:
+                price = local_price
+                used_local_price = True
+            elif not live_price_failed:
+                price = cheapest_price_for_card(e["name"], lj_cards, price_by_pid)
+                if price is not None:
+                    used_live_price = True
+            else:
+                price = None
+
             if price is not None:
                 total_cost += price * e["missing"]
                 priced_count += 1
@@ -785,8 +822,16 @@ def what_am_i_missing(deck_list: str, collection_csv: str) -> str:
         if priced_count:
             note = "" if priced_count == len(short) else f" ({len(short) - priced_count} card(s) had no price data)"
             lines.append(f"**Estimated cost to complete: ${total_cost:.2f}**{note}")
-            lines.append("_Live TCGPlayer snapshot via tcgcsv.com — treat as an estimate, not a quote._")
-        elif not prices_available:
+            if used_local_price and used_live_price:
+                lines.append(
+                    "_Prices from your collection where you already own a printing; "
+                    "live TCGPlayer snapshot (tcgcsv.com) for the rest — treat as an estimate, not a quote._"
+                )
+            elif used_live_price:
+                lines.append("_Live TCGPlayer snapshot via tcgcsv.com — treat as an estimate, not a quote._")
+            else:
+                lines.append("_Prices from your own collection CSV._")
+        elif live_price_failed:
             lines.append("_Could not fetch live TCGPlayer prices — cost estimate unavailable._")
         lines.append("")
 

@@ -177,7 +177,7 @@ Returns: ink curve (1-2/3-4/5-6/7+ cost brackets), inkable vs. uninkable count, 
 
 > "How much would it cost to finish this Amber/Steel list?"
 
-Same deck list format as `analyze_deck`. Cross-references against your enriched collection CSV, then splits results into cards you already have enough of and cards you're missing or short on. For anything missing, fetches live TCGPlayer market prices from [tcgcsv.com](https://tcgcsv.com) (cheapest printing across all sets/rarities, since gameplay is identical) and sums them into a completion cost estimate — a live snapshot, not a quote. Price data is cached for 24h, so the first call takes a bit longer while it warms up.
+Same deck list format as `analyze_deck`. Cross-references against your enriched collection CSV, then splits results into cards you already have enough of and cards you're missing or short on. For cards you're short on (own at least one printing already), the cost comes straight from the CSV's own TCG Market Price column — no network call needed. Only cards you own zero copies of fall back to a live TCGPlayer lookup via [tcgcsv.com](https://tcgcsv.com) (cheapest printing across all sets/rarities, since gameplay is identical), and even then only if at least one card actually needs it. Live price data is cached for 24h, so the first call that needs it takes a bit longer while it warms up.
 
 ---
 

@@ -2,7 +2,7 @@
 
 ## 0.1.8 — 2026-07-09
 
-Add `what_am_i_missing` tool: cross-references a deck list against an enriched collection CSV, splitting cards into "already have" and "missing or short," then fetches live TCGPlayer prices from tcgcsv.com for anything missing (cheapest printing across all sets, cached 24h) and sums them into a completion cost estimate.
+Add `what_am_i_missing` tool: cross-references a deck list against an enriched collection CSV, splitting cards into "already have" and "missing or short." For cards you're short on, the cost comes straight from the CSV's own TCG Market Price column (already there, no network call needed) — only cards you own zero copies of fall back to a live TCGPlayer lookup via tcgcsv.com (cheapest printing across all sets, cached 24h), and only if at least one card actually needs it.
 
 Also fixes a latent bug found while integrating tcgcsv.com: the shared `_fetch()` HTTP helper sent the default `Python-urllib/x.y` User-Agent, which tcgcsv.com rejects with a 401. Added a `lorcana-mcp/1.0` UA to all outgoing requests.
 
