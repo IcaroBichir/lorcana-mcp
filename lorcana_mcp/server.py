@@ -72,7 +72,7 @@ def _load_owned_counts(csv_path: str) -> dict[str, int]:
 
 
 @mcp.tool()
-def enrich_csv(input_path: str, cache_path: str = "") -> str:
+def enrich_csv(input_path: str, cache_path: str = "", refresh_prices: bool = False) -> str:
     """
     Enrich a raw TCGPlayer Lorcana CSV export with full card data.
 
@@ -88,9 +88,14 @@ def enrich_csv(input_path: str, cache_path: str = "") -> str:
         input_path: Absolute path to the raw TCGPlayer CSV export.
         cache_path: Optional path to a previous enriched CSV to speed up re-runs
                     by skipping API calls for cards already seen.
+        refresh_prices: If True, overwrite each row's TCG Market Price with a
+                        live tcgcsv.com lookup for that exact printing, instead
+                        of leaving whatever the raw TCGPlayer export had at
+                        download time. Use this to bring an old enriched CSV's
+                        prices current without re-exporting from TCGPlayer.
     """
     try:
-        result = _enrich_csv(input_path, cache_path=cache_path or None)
+        result = _enrich_csv(input_path, cache_path=cache_path or None, refresh_prices=refresh_prices)
     except FileNotFoundError as e:
         return f"Error: {e}"
     except Exception as e:
@@ -116,6 +121,10 @@ def enrich_csv(input_path: str, cache_path: str = "") -> str:
             "\n".join(rows)
         )
 
+    prices_line = ""
+    if result["prices_refreshed"] is not None:
+        prices_line = f"  Prices refreshed: {result['prices_refreshed']}/{result['total_rows']}\n"
+
     return (
         f"Enrichment complete.\n\n"
         f"Output files:\n"
@@ -125,7 +134,8 @@ def enrich_csv(input_path: str, cache_path: str = "") -> str:
         f"  Total rows:   {result['total_rows']}\n"
         f"  Cache hits:   {result['cache_hits']}\n"
         f"  API fetches:  {result['api_fetches']}\n"
-        f"  Dreamborn rows written: {result['dreamborn_rows']}\n\n"
+        f"  Dreamborn rows written: {result['dreamborn_rows']}\n"
+        f"{prices_line}\n"
         f"Fill rates:\n{fill_lines}"
         f"{unmatched_block}"
         f"{promo_block}"

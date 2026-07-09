@@ -7,6 +7,7 @@ from pathlib import Path
 from .api import (
     ENRICH_FIELDS, OUT_COLS, SETNAME_TO_LJCODE, PROMO_SETCODE, LJ_ONLY_SETS,
     enrich_from_api, enrich_from_lj, pick_lj_card, load_all_data,
+    fetch_tcgcsv_prices,
 )
 
 _BLANK = ("", "", "", "", "", "", "", "", "", "")
@@ -47,12 +48,19 @@ def enrich_csv(
     input_path: str,
     output_dir: str | None = None,
     cache_path: str | None = None,
+    refresh_prices: bool = False,
 ) -> dict:
     """
     Enrich a raw TCGPlayer CSV export with card data from both APIs.
 
+    If refresh_prices is True, each row's "TCG Market Price" is overwritten
+    with a live tcgcsv.com lookup keyed by that row's own TCGplayer Id (the
+    exact printing you own), instead of whatever the raw TCGPlayer export
+    happened to have at download time.
+
     Returns a dict with keys: enriched_path, dreamborn_path, total_rows,
-    cache_hits, api_fetches, unmatched, fill_rates.
+    cache_hits, api_fetches, unmatched, fill_rates, prices_refreshed
+    (None if refresh_prices was False).
     """
     inp = Path(input_path)
     out_dir = Path(output_dir) if output_dir else inp.parent
@@ -62,6 +70,8 @@ def enrich_csv(
     cache: dict = {}
     if cache_path:
         cache = load_csv_cache(cache_path)
+
+    price_by_pid: dict[int, float] = fetch_tcgcsv_prices() if refresh_prices else {}
 
     with open(inp, newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
@@ -80,6 +90,7 @@ def enrich_csv(
 
     unmatched: list[str] = []
     out_rows: list[dict] = []
+    prices_refreshed = 0
 
     for row in rows:
         set_name = row["Set Name"].strip()
@@ -105,6 +116,20 @@ def enrich_csv(
             "Lore Points": "" if lore in ("", "None") else lore,
             "Inkable": inkable, "Keywords": keywords, "Abilities": abilities,
         })
+
+        if refresh_prices:
+            # "Product ID" is TCGPlayer's actual product/listing ID and is what
+            # LorcanaJSON's externalLinks.tcgPlayerId (and tcgcsv.com's
+            # productId) match against. "TCGplayer Id" is a different,
+            # secondary ID that doesn't correspond to tcgcsv.com's data.
+            try:
+                pid = int((row.get("Product ID") or "").strip())
+            except ValueError:
+                pid = None
+            if pid is not None and pid in price_by_pid:
+                out["TCG Market Price"] = str(price_by_pid[pid])
+                prices_refreshed += 1
+
         out_rows.append(out)
 
     with open(enriched_out, "w", newline="", encoding="utf-8") as f:
@@ -130,6 +155,7 @@ def enrich_csv(
         "dreamborn_rows": len(dreamborn_rows["rows"]),
         "promo_skipped": dreamborn_rows["promos"],
         "fill_rates": fill,
+        "prices_refreshed": prices_refreshed if refresh_prices else None,
     }
 
 

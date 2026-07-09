@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import io
+from unittest.mock import patch
 
 import pytest
 
@@ -149,3 +150,115 @@ class TestBuildDreambornRows:
         assert result["rows"] == []
         assert len(result["promos"]) == 1
         assert result["promos"][0]["name"] == "Buzz Lightyear - Space Ranger"
+
+
+# ── enrich_csv — refresh_prices ─────────────────────────────────────────────────
+
+_RAW_HEADER = [
+    "Product ID", "TCGplayer Id", "Product Line", "Set Name", "Product Name",
+    "Title", "Number", "Rarity", "Condition", "Printing",
+    "TCG Market Price", "TCG Direct Low", "TCG Low Price With Shipping", "TCG Low Price",
+    "Total Quantity", "Add to Quantity", "TCG Marketplace Price", "Photo URL",
+]
+
+
+def _write_raw_csv(tmp_path, product_id="692010", market_price="3.00"):
+    row = {h: "" for h in _RAW_HEADER}
+    row.update({
+        # Product ID is TCGPlayer's actual product/listing ID — the one that
+        # matches LorcanaJSON's externalLinks.tcgPlayerId and tcgcsv.com's
+        # productId. TCGplayer Id is a different, unrelated secondary ID —
+        # deliberately set to something that would never match, to catch any
+        # regression back to keying off the wrong column.
+        "Product ID": product_id, "TCGplayer Id": "9272345", "Product Line": "Disney Lorcana",
+        "Set Name": "The First Chapter", "Product Name": "Goofy - Musketeer",
+        "Number": "4/204", "Rarity": "Uncommon", "Condition": "Near Mint", "Printing": "Normal",
+        "TCG Market Price": market_price, "Add to Quantity": "2",
+    })
+    path = tmp_path / "raw.csv"
+    with open(path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=_RAW_HEADER)
+        writer.writeheader()
+        writer.writerow(row)
+    return path
+
+
+def _api_card():
+    return {
+        "Color": "Amber", "Cost": 5, "Type": "Character", "Classifications": "Dreamborn/Hero",
+        "Strength": 3, "Willpower": 6, "Lore": 1, "Inkable": True, "Body_Text": "",
+    }
+
+
+class TestEnrichCsvRefreshPrices:
+    def test_refresh_prices_overwrites_market_price(self, tmp_path):
+        from lorcana_mcp.enricher import enrich_csv
+        raw = _write_raw_csv(tmp_path, product_id="692010", market_price="3.00")
+
+        with patch("lorcana_mcp.enricher.load_all_data",
+                   return_value=({("The First Chapter", 4): _api_card()}, {}, [])), \
+             patch("lorcana_mcp.enricher.fetch_tcgcsv_prices", return_value={692010: 9.99}):
+            result = enrich_csv(str(raw), refresh_prices=True)
+
+        assert result["prices_refreshed"] == 1
+        with open(result["enriched_path"]) as f:
+            rows = list(csv.DictReader(f))
+        assert rows[0]["TCG Market Price"] == "9.99"
+
+    def test_refresh_prices_false_leaves_original_price(self, tmp_path):
+        from lorcana_mcp.enricher import enrich_csv
+        raw = _write_raw_csv(tmp_path, product_id="692010", market_price="3.00")
+
+        with patch("lorcana_mcp.enricher.load_all_data",
+                   return_value=({("The First Chapter", 4): _api_card()}, {}, [])), \
+             patch("lorcana_mcp.enricher.fetch_tcgcsv_prices") as mock_prices:
+            result = enrich_csv(str(raw), refresh_prices=False)
+
+        mock_prices.assert_not_called()
+        assert result["prices_refreshed"] is None
+        with open(result["enriched_path"]) as f:
+            rows = list(csv.DictReader(f))
+        assert rows[0]["TCG Market Price"] == "3.00"
+
+    def test_refresh_prices_no_match_keeps_original(self, tmp_path):
+        from lorcana_mcp.enricher import enrich_csv
+        raw = _write_raw_csv(tmp_path, product_id="692010", market_price="3.00")
+
+        with patch("lorcana_mcp.enricher.load_all_data",
+                   return_value=({("The First Chapter", 4): _api_card()}, {}, [])), \
+             patch("lorcana_mcp.enricher.fetch_tcgcsv_prices", return_value={99999: 1.0}):
+            result = enrich_csv(str(raw), refresh_prices=True)
+
+        assert result["prices_refreshed"] == 0
+        with open(result["enriched_path"]) as f:
+            rows = list(csv.DictReader(f))
+        assert rows[0]["TCG Market Price"] == "3.00"
+
+    def test_refresh_prices_missing_product_id_skipped(self, tmp_path):
+        from lorcana_mcp.enricher import enrich_csv
+        raw = _write_raw_csv(tmp_path, product_id="", market_price="3.00")
+
+        with patch("lorcana_mcp.enricher.load_all_data",
+                   return_value=({("The First Chapter", 4): _api_card()}, {}, [])), \
+             patch("lorcana_mcp.enricher.fetch_tcgcsv_prices", return_value={692010: 9.99}):
+            result = enrich_csv(str(raw), refresh_prices=True)
+
+        assert result["prices_refreshed"] == 0
+        with open(result["enriched_path"]) as f:
+            rows = list(csv.DictReader(f))
+        assert rows[0]["TCG Market Price"] == "3.00"
+
+    def test_refresh_prices_does_not_match_on_tcgplayer_id_column(self, tmp_path):
+        # regression guard: "TCGplayer Id" (9272345) must NOT be used for matching
+        from lorcana_mcp.enricher import enrich_csv
+        raw = _write_raw_csv(tmp_path, product_id="692010", market_price="3.00")
+
+        with patch("lorcana_mcp.enricher.load_all_data",
+                   return_value=({("The First Chapter", 4): _api_card()}, {}, [])), \
+             patch("lorcana_mcp.enricher.fetch_tcgcsv_prices", return_value={9272345: 9.99}):
+            result = enrich_csv(str(raw), refresh_prices=True)
+
+        assert result["prices_refreshed"] == 0
+        with open(result["enriched_path"]) as f:
+            rows = list(csv.DictReader(f))
+        assert rows[0]["TCG Market Price"] == "3.00"

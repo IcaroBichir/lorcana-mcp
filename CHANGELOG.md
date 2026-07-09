@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.9 — 2026-07-09
+
+Add `refresh_prices` flag to `enrich_csv`: when set, overwrites each row's TCG Market Price with a live tcgcsv.com lookup for that exact printing (matched via the row's own Product ID), instead of leaving whatever the raw TCGPlayer export had at download time. Lets an old enriched CSV's prices be brought current without re-exporting from TCGPlayer. Report output now includes a "Prices refreshed: N/Total" line when used.
+
+Found and fixed a real bug while building this: initially matched on the CSV's "TCGplayer Id" column, which is a secondary listing ID unrelated to tcgcsv.com's `productId` — it silently refreshed 0/391 rows against the real collection. The correct match key is "Product ID" (TCGPlayer's actual product ID, the same one LorcanaJSON's `externalLinks.tcgPlayerId` uses). Added a regression test that deliberately sets a non-matching "TCGplayer Id" to guard against this recurring.
+
 ## 0.1.8 — 2026-07-09
 
 Add `what_am_i_missing` tool: cross-references a deck list against an enriched collection CSV, splitting cards into "already have" and "missing or short." For cards you're short on, the cost comes straight from the CSV's own TCG Market Price column (already there, no network call needed) — only cards you own zero copies of fall back to a live TCGPlayer lookup via tcgcsv.com (cheapest printing across all sets, cached 24h), and only if at least one card actually needs it.

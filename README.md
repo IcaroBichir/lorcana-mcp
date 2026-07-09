@@ -16,7 +16,7 @@ Nine tools are available in Claude once the server is running:
 
 | Tool                  | What it does |
 |-----------------------|---|
-| `enrich_csv`          | Enriches a raw TCGPlayer export with Ink, Cost, Type, Subtypes, STR/WIL/Lore, Inkable, Keywords, and Abilities. Writes an enriched CSV and a dreamborn.ink-ready import file next to the input. |
+| `enrich_csv`          | Enriches a raw TCGPlayer export with Ink, Cost, Type, Subtypes, STR/WIL/Lore, Inkable, Keywords, and Abilities. Writes an enriched CSV and a dreamborn.ink-ready import file next to the input. `refresh_prices=True` also refreshes TCG Market Price with a live tcgcsv.com lookup. |
 | `lookup_card`         | Looks up any card by name. Returns full stats, ability text, format legality, and card image URL. |
 | `resolve_card`        | Fuzzy-resolves an informal, misspelled, or subtitle-less card name (e.g. "goofy musketeer", "elsa"). Returns a single confident match, a ranked top-3 to disambiguate, or nothing found. |
 | `search_cards`        | Searches the full card pool by color, type, rarity, set, cost range, keyword, ability text, or subtype — with pagination. |
@@ -102,6 +102,12 @@ Claude will fetch card data from the APIs and write two files next to your input
 On re-runs, pass the previous enriched file as a cache to skip already-seen cards:
 
 > "Enrich /Users/me/Downloads/Lorcana_new.csv using /Users/me/lorcana/enriched_Lorcana_old.csv as cache"
+
+To refresh prices on demand without re-exporting from TCGPlayer:
+
+> "Re-enrich my collection at /Users/me/lorcana/enriched_Lorcana_063026.csv and refresh prices"
+
+`refresh_prices=True` overwrites each row's TCG Market Price with a live tcgcsv.com lookup for that exact printing — useful when an enriched CSV's prices are stale.
 
 ### Look up a card
 
