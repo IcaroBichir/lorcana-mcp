@@ -289,7 +289,7 @@ New sets are picked up automatically via LorcanaJSON as long as the set name is 
 
 Go to [TCGPlayer](https://www.tcgplayer.com) → **My Account → My Collection → Export**. The raw file has columns like Product Name, Set Name, Number, Rarity, Condition, Printing, and `Add to Quantity` (this is the real owned-quantity column — `Total Quantity` is always blank in exports).
 
-> **Promo cards:** skipped in the dreamborn output because dreamborn uses internal promo set numbers that don't match TCGPlayer's format. Add them manually via dreamborn.ink's card search after importing the rest.
+> **Promo cards:** resolved automatically where possible. dreamborn.ink's bulk import represents a promo as `(Set Number, Card Number)` where `Set Number` is the LJ set the promo drop is tied to and `Card Number` is the full `"N/Series"` string (e.g. `"57/P3"`) — verified against a real dreamborn export, not just its card-browser display (an earlier attempt based on the display alone silently corrupted imports; see CHANGELOG.md's 0.2.2/0.2.3 entries). Any promo not yet in that map still needs manual entry via dreamborn.ink's card search after importing the rest.
 
 ---
 
@@ -357,7 +357,7 @@ If you're an AI agent (Claude or otherwise) with this MCP server connected, read
 ### Known gotchas (found the hard way — see CHANGELOG.md)
 
 - **`Product ID` (CSV column 1) ≠ `TCGplayer Id` (column 2).** Only `Product ID` matches external pricing APIs (LorcanaJSON's `externalLinks.tcgPlayerId`, tcgcsv.com's `productId`). Column 2 is an unrelated secondary ID — if you're ever writing custom code against this data, matching on it silently returns zero results.
-- **Promo cards are skipped in the dreamborn.ink output** — their numbering doesn't correspond to TCGPlayer's. Tell the user to add promos manually via dreamborn.ink's search after importing.
+- **Promo cards resolve via `PROMO_DREAMBORN_ROW`/`PROMO_DREAMBORN_ROW_BY_NUMBER`** (`api.py`) — verified against a real dreamborn.ink export, not its card-browser display (an earlier browser-based guess silently corrupted a real import; CHANGELOG.md 0.2.2). A promo's dreamborn `Card Number` is the full `"N/Series"` string, not split into a separate series field — don't re-split it if extending this map. Anything not yet in the map still needs manual entry via dreamborn.ink's search after importing.
 - **Duplicate-looking rows in search results are printings, not bugs** — `search_cards` and `find_song_synergies` already deduplicate alt-art/Enchanted reprints by name internally, so don't be surprised the count is lower than you'd expect from a raw card list.
 
 ### If you're modifying this codebase

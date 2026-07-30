@@ -57,6 +57,234 @@ PROMO_SETCODE: dict[str, str] = {
     "Stitch - Carefree Snowboarder":    "1",
 }
 
+# Promo card name → dreamborn.ink's real bulk-CSV-import row (Set Number, Card Number).
+#
+# An earlier version of this constant (v0.2.1) guessed at this from dreamborn's card
+# *browser* display (its "9/P4" style label) and wrote the series letter alone into
+# the Set Number column, splitting number/series into two fields. That guess was wrong
+# and got reverted in v0.2.2 after a real import attempt showed it silently resolves
+# to an unrelated card (full incident in CHANGELOG.md's 0.2.2 entry).
+#
+# This version is generated from an actual dreamborn.ink CSV *export* (promos-only,
+# ~186 rows, provided by the user 2026-07-30) — the verified real schema, not the
+# browser display. Set Number is the plain LJ set code of whichever set the promo
+# drop is tied to (not always the newest set — P3 promos are tied to set 12, P4/PD1
+# to set 13, the CC1 Tinker Bell to set 9, etc.), and Card Number is the full
+# "N/Series" string as one field (e.g. "57/P3"), unlike a normal card's plain
+# integer Card Number. Covers every promo in that export whose name is unique;
+# see PROMO_DREAMBORN_ROW_BY_NUMBER below for names with more than one promo print.
+PROMO_DREAMBORN_ROW: dict[str, tuple[int, str]] = {
+    "A Whole New World":                           (1, "10/C1"),
+    "Aladdin - Intrepid Commander":                (6, "9/P2"),
+    "Aladdin - Vigilant Guard":                     (8, "29/P2"),
+    "Alice - Accidentally Adrift":                  (9, "2/P3"),
+    "Anna - Ice Breaker":                           (7, "19/P2"),
+    "Anna - Trusting Sister":                       (8, "5/CC1"),
+    "Archimedes - Resourceful Owl":                 (8, "34/P2"),
+    "Ariel - Curious Traveler":                     (12, "43/P3"),
+    "Ariel - Spectacular Singer":                   (1, "1/CC1"),
+    "Baymax - Armored Companion":                   (6, "9/C1"),
+    "Beast - Gracious Prince":                      (9, "40/P3"),
+    "Belle - Accomplished Mystic":                  (4, "41/P3"),
+    "Belle - Always Reading":                       (13, "13/P4"),
+    "Belle - Apprentice Inventor":                  (7, "37/P3"),
+    "Boo - Energetic Child":                        (13, "6/PD1"),
+    "Bruno Madrigal - Undetected Uncle":            (4, "4/D23"),
+    "Bucky - Squirrel Squeak Tutor":                (2, "15/P1"),
+    "Buzz Lightyear - On the Way":                  (12, "56/P3"),
+    "Buzz Lightyear - Providing Cover":             (13, "5/PD1"),
+    "Buzz Lightyear - Space Ranger":                (12, "57/P3"),
+    "Captain Hook - Forceful Duelist":              (1, "7/P1"),
+    "Chicha - Dedicated Mother":                    (5, "5/P2"),
+    "Cinderella - Knight in Training":              (2, "14/P1"),
+    "Cinderella - Resourceful Traveler":            (12, "47/P3"),
+    "Cruella De Vil - Judgmental Traveler":         (12, "45/P3"),
+    "Cruella de Vil - Miserable As Usual":          (1, "4/P1"),
+    "Cursed Merfolk - Ursula's Handiwork":           (9, "7/P3"),
+    "Daisy Duck - Pirate Captain":                  (6, "16/P3"),
+    "Dash Parr - Lava Runner":                      (12, "52/P3"),
+    "Donald Duck - Buccaneer":                      (4, "15/P3"),
+    "Donald Duck - Musketeer":                      (1, "13/P1"),
+    "Donald Duck - Pie Slinger":                    (5, "2/DIS"),
+    "Dumbo - The Flying Elephant":                  (9, "1/P3"),
+    "Elisa Maza - Transformed Gargoyle":            (11, "30/P3"),
+    "Elsa - Exploring the Unknown":                 (10, "22/P3"),
+    "Elsa - Gloves Off":                            (2, "19/P1"),
+    "Elsa - Snow Queen":                            (1, "3/P1"),
+    "Elsa - The Fifth Spirit":                      (5, "6/P3"),
+    "Elsa - Trusted Sister":                        (7, "2/CC1"),
+    "Elsa's Ice Palace - Place of Solitude":        (5, "7/C1"),
+    "Finders Keepers":                              (5, "4/P2"),
+    "Flotsam & Jetsam - Entangling Eels":           (4, "40/P1"),
+    "Four Dozen Eggs":                              (2, "33/P1"),
+    "Gaston - Arrogant Hunter":                     (1, "24/P1"),
+    "Genie - Powers Unleashed":                     (1, "20/P1"),
+    "Goofy - Emerald Champion":                     (10, "25/P3"),
+    "Goofy - Expert Shipwright":                    (6, "14/P3"),
+    "Goofy - Musketeer":                            (1, "12/P1"),
+    "Goofy - Set for Adventure":                    (9, "39/P3"),
+    "Gramma Tala - Connected to Nature":            (11, "28/P3"),
+    "Heihei - Boat Snack":                          (1, "9/P1"),
+    "Hidden Inkcaster":                             (4, "36/P1"),
+    "Honey Lemon - Chemical Genius":                (6, "11/P2"),
+    "How Far I'll Go":                              (3, "28/P1"),
+    "Iago - Out of Reach":                          (8, "8/D23"),
+    "If I Didn't Have You":                         (13, "14/P4"),
+    "Invited to the Ball":                          (5, "6/C1"),
+    "Jafar - High Sultan of Lorcana":               (8, "32/P2"),
+    "Jasmine - Royal Seafarer":                     (6, "3/CC1"),
+    "Jasmine - Soothing Princess":                  (10, "26/P3"),
+    "John Silver - Greedy Treasure Seeker":         (3, "29/P1"),
+    "Jolly Roger - Hook's Ship":                    (3, "27/P1"),
+    "Kit Cloudkicker - Tough Guy":                  (3, "26/P1"),
+    "Kristoff - Reindeer Keeper":                   (5, "2/P2"),
+    "Kronk - Laid Back":                            (7, "20/P2"),
+    "Kuzco - Temperamental Emperor":                (1, "8/C1"),
+    "Lady - Decisive Dog":                          (8, "28/P2"),
+    "Lenny - Toy Binoculars":                       (12, "49/P3"),
+    "Let It Go":                                    (1, "2/C1"),
+    "Let it Go":                                    (1, "10/C2"),
+    "Li Shang - Newly Promoted":                    (7, "22/P2"),
+    "Lilo - Escape Artist":                         (6, "25/P2"),
+    "Mad Hatter - Unruly Eccentric":                (7, "16/D23"),
+    "Maleficent - Imperious Traveler":              (12, "44/P3"),
+    "Maleficent - Uninvited":                       (1, "22/P1"),
+    "Maui - Demigod":                               (1, "23/P1"),
+    "Maximus - Relentless Stallion":                (13, "8/PD1"),
+    "Meilin Lee - Lead Vocalist":                   (13, "10/P4"),
+    "Merlin - Envisioning the Future":              (13, "7/PD1"),
+    "Mickey Mouse - Detective":                     (1, "8/P1"),
+    "Mickey Mouse - Friendly Face":                 (2, "18/P1"),
+    "Mickey Mouse - Leader of the Band":            (4, "34/P1"),
+    "Mickey Mouse - Musketeer":                     (1, "11/P1"),
+    "Mickey Mouse - Playful Sorcerer":              (4, "7/D23"),
+    "Minnie Mouse - Daring Defender":               (8, "35/P2"),
+    "Minnie Mouse - Wide-Eyed Diver":               (2, "16/P1"),
+    "Mirabel Madrigal - Family Gatherer":           (5, "7/P2"),
+    "Morph - Little Imitator":                      (13, "9/P4"),
+    "Mulan - Disguised Soldier":                    (7, "38/P3"),
+    "Mulan - Elite Archer":                         (9, "4/CC1"),
+    "Mulan - Enemy of Entanglement":                (4, "37/P1"),
+    "Nala - Mischievous Cub":                       (5, "3/P2"),
+    "Oswald - The Lucky Rabbit":                    (6, "6/D23"),
+    "Patch - Playful Pup":                          (8, "30/P2"),
+    "Perdita - Playful Mother":                     (7, "21/P2"),
+    "Pinocchio - Talkative Puppet":                 (2, "32/P1"),
+    "Pluto - Tried and True":                       (8, "27/P2"),
+    "Pocahontas - Guiding the Tribe":               (13, "3/PD1"),
+    "Pocahontas - Steadfast Traveler":              (12, "48/P3"),
+    "Prince John - Gold Lover":                     (5, "1/P2"),
+    "Pull the Lever!":                              (8, "31/P2"),
+    "Putting It All Together":                      (10, "27/P3"),
+    "Queen of Hearts - Impatient Traveler":         (12, "46/P3"),
+    "Randall Boggs - Scary Smart":                  (13, "11/P4"),
+    "Rapunzel - Appreciative Artist":               (4, "1/DIS"),
+    "Rapunzel - Ethereal Protector":                (11, "2/PD1"),
+    "Rapunzel - Gifted Artist":                     (2, "31/P1"),
+    "Rapunzel - Gifted with Healing":               (1, "4/C1"),
+    "Rescue Rangers Away!":                         (6, "10/P2"),
+    "Robin Hood - Capable Fighter":                 (2, "17/P1"),
+    "Robin Hood - Unrivaled Archer":                (1, "6/P1"),
+    "Scar - Eerily Prepared":                       (10, "21/P3"),
+    "Scar - Heartless Hunter":                      (6, "14/P2"),
+    "Scrooge McDuck - S.H.U.S.H. Agent":            (10, "36/P3"),
+    "Scrooge McDuck - Uncle Moneybags":             (3, "39/P1"),
+    "Sisu - Daring Visitor":                        (9, "9/P3"),
+    "Snow White - Fairest in the Land":             (7, "23/P2"),
+    "Stitch - Abomination":                         (1, "21/P1"),
+    "Stitch - Alien Buccaneer":                     (6, "8/P2"),
+    "Stitch - Carefree Snowboarder":                (11, "42/P3"),
+    "Stitch - High Badness Level":                  (11, "35/P3"),
+    "Stitch - Team Underdog":                       (5, "6/P2"),
+    "Strength of a Raging Fire":                    (9, "8/P3"),
+    "Sulley - The New Boss":                        (13, "58/P3"),
+    "The Great Illuminary - Abandoned Laboratory":  (10, "19/P3"),
+    "The Horseman Strikes!":                        (10, "20/P3"),
+    "The Queen - Conceited Ruler":                  (9, "3/P3"),
+    "The Queen - Mirror Seeker":                    (9, "12/P3"),
+    "Tigger - Hunny Barbarian":                     (13, "12/P4"),
+    "Timon - Snowball Swiper":                      (11, "32/P3"),
+    "Ursula - Deceiver":                            (3, "3/D23"),
+    "Ursula - Sea Witch Queen":                     (4, "38/P1"),
+    "Ursula's Lair - Eye of the Storm":             (4, "35/P1"),
+    "Vaiana - Adventurer of Land and Sea":          (7, "26/P2"),
+    "Vanellope von Schweetz - Sugar Rush Princess": (5, "5/D23"),
+    "Violet Parr - Learning New Powers":            (12, "55/P3"),
+    "Vixey - Expert Fisher":                        (13, "4/PD1"),
+    "Wasabi - Methodical Engineer":                 (6, "13/P2"),
+    "White Rabbit - Late Again":                    (11, "29/P3"),
+    "Will o' the Wisp - Forest Spirit":             (12, "51/P3"),
+    "Woody - Helping a Friend":                     (13, "60/P3"),
+    "Yzma - Alchemist":                             (1, "10/P1"),
+    "Zeus - Missing His Spark":                     (10, "18/P3"),
+    "Zipper - Tiny Helper":                         (12, "50/P3"),
+}
+
+# Promos where the same name has more than one distinct promo print in dreamborn's
+# export (different Set Number/Card Number). Disambiguated by TCGPlayer's own promo
+# "Number" column, which — verified across every one of these — equals the numeric
+# prefix of dreamborn's "N/Series" Card Number for the same physical card (e.g.
+# TCGPlayer promo #57 for Buzz Lightyear - Space Ranger IS dreamborn's "57/P3").
+# Two names in the export (Maleficent - Monstrous Dragon, Mickey Mouse - Brave Little
+# Tailor) have two prints sharing the same numeric prefix too and can't be resolved
+# this way — deliberately omitted; they fall through to the manual-add list.
+PROMO_DREAMBORN_ROW_BY_NUMBER: dict[tuple[str, str], tuple[int, str]] = {
+    ("Beast - Snowfield Troublemaker", "1"):              (11, "1/PD1"),
+    ("Beast - Snowfield Troublemaker", "31"):              (11, "31/P3"),
+    ("Cinderella - Stouthearted", "2"):                    (2, "2/D23"),
+    ("Cinderella - Stouthearted", "3"):                    (2, "3/C1"),
+    ("Daisy Duck - Paranormal Investigator", "23"):        (10, "23/P3"),
+    ("Daisy Duck - Paranormal Investigator", "24"):        (10, "24/P3"),
+    ("Dragon Fire", "1"):                                  (1, "1/C1"),
+    ("Dragon Fire", "9"):                                  (1, "9/C2"),
+    ("Elsa - Ice Maker", "2"):                              (7, "2/C2"),
+    ("Elsa - Ice Maker", "6"):                              (7, "6/C2"),
+    ("Hiro Hamada - Armor Designer", "24A"):                (7, "24A/P2"),
+    ("Hiro Hamada - Armor Designer", "24B"):                (7, "24B/P2"),
+    ("Mickey Mouse - Pirate Captain", "13"):                (6, "13/P3"),
+    ("Mickey Mouse - Pirate Captain", "18"):                (6, "18/P2"),
+    ("Mickey Mouse - True Friend", "10"):                   (1, "10/P3"),
+    ("Mickey Mouse - True Friend", "15"):                   (1, "15/P2"),
+    ("Mickey Mouse - True Friend", "25"):                   (1, "25/P1"),
+    ("Mickey Mouse - True Friend", "36"):                   (1, "36/P2"),
+    ("Minnie Mouse - Pirate Lookout", "12"):                (6, "12/P2"),
+    ("Minnie Mouse - Pirate Lookout", "17"):                (6, "17/P3"),
+    ("Mulan - Charging Ahead", "3"):                        (8, "3/C2"),
+    ("Mulan - Charging Ahead", "7"):                        (8, "7/C2"),
+    ("Pegasus - Gift for Hercules", "1"):                   (9, "1/C2"),
+    ("Pegasus - Gift for Hercules", "5"):                   (9, "5/C2"),
+    ("Rapunzel - Escaping the Tower", "15"):                (13, "15/P4"),
+    ("Rapunzel - Escaping the Tower", "16"):                (13, "16/P4"),
+    ("Simba - Pride Protector", "4"):                       (6, "4/C2"),
+    ("Simba - Pride Protector", "8"):                       (6, "8/C2"),
+    ("Stitch - Rock Star", "2"):                            (1, "2/P1"),
+    ("Stitch - Rock Star", "3"):                            (9, "3/DIS"),
+    ("Stitch - Rock Star", "30"):                           (3, "30/P1"),
+    ("Tinker Bell - Giant Fairy", "11"):                    (9, "11/P3"),
+    ("Tinker Bell - Giant Fairy", "6"):                     (9, "6/CC1"),
+    ("Tinker Bell - Snowflake Collector", "33"):            (11, "33/P3"),
+    ("Tinker Bell - Snowflake Collector", "34"):            (11, "34/P3"),
+    ("Woody - Jungle Guide", "53"):                         (12, "53/P3"),
+    ("Woody - Jungle Guide", "54"):                         (12, "54/P3"),
+}
+
+_PROMO_TRAILING_PAREN_RE = re.compile(r"\s*\([^)]*\)\s*$")
+
+
+def resolve_promo_dreamborn_row(name: str, number: str) -> tuple[int, str] | None:
+    """Look up a promo card's dreamborn.ink bulk-import (Set Number, Card Number), if known.
+
+    `number` is the card's own promo Number as TCGPlayer exports it — used only to
+    disambiguate names with more than one promo print (see PROMO_DREAMBORN_ROW_BY_NUMBER).
+    A trailing "(...)" suffix on `name` (e.g. "(Store Championship Participant)") is
+    stripped before lookup, matching CLAUDE.md's documented promo-name convention.
+    """
+    normalized = _PROMO_TRAILING_PAREN_RE.sub("", name).strip()
+    by_number = PROMO_DREAMBORN_ROW_BY_NUMBER.get((normalized, number))
+    if by_number:
+        return by_number
+    return PROMO_DREAMBORN_ROW.get(normalized)
+
 KEYWORD_PATTERNS = [
     (r"\bEvasive\b",             "Evasive"),
     (r"\bBodyguard\b",           "Bodyguard"),

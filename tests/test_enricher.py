@@ -137,7 +137,10 @@ class TestBuildDreambornRows:
         result = _build_dreamborn_rows(rows)
         assert result["rows"] == []
 
-    def test_promo_goes_to_skipped(self):
+    def test_promo_with_known_dreamborn_row_is_resolved(self):
+        # Verified against a real dreamborn.ink export (promos-only), not just the
+        # card browser display — Set Number is the plain LJ set code the promo drop
+        # is tied to, and Card Number is the full "N/Series" string as one field.
         rows = [{
             "Set Name": "Disney Lorcana Promo Cards",
             "Number": "57",
@@ -147,9 +150,59 @@ class TestBuildDreambornRows:
             "Ink": "Emerald",
         }]
         result = _build_dreamborn_rows(rows)
+        assert result["promos"] == []
+        assert result["rows"] == [{
+            "Set Number": 12, "Card Number": "57/P3", "Variant": "foil", "Count": 1,
+        }]
+
+    def test_promo_disambiguated_by_tcgplayer_number(self):
+        # "Minnie Mouse - Pirate Lookout" has two distinct promo prints in dreamborn's
+        # export (12/P2 and 17/P3) — TCGPlayer's own promo Number ("12" here) is what
+        # picks the right one.
+        rows = [{
+            "Set Name": "Disney Lorcana Promo Cards",
+            "Number": "12",
+            "Printing": "Cold Foil",
+            "Add to Quantity": "1",
+            "Product Name": "Minnie Mouse - Pirate Lookout",
+            "Ink": "Ruby",
+        }]
+        result = _build_dreamborn_rows(rows)
+        assert result["promos"] == []
+        assert result["rows"] == [{
+            "Set Number": 6, "Card Number": "12/P2", "Variant": "foil", "Count": 1,
+        }]
+
+    def test_promo_name_with_trailing_paren_suffix_is_normalized(self):
+        # TCGPlayer names this printing "Woody - Jungle Guide (Store Championship
+        # Participant)" — dreamborn's export just calls it "Woody - Jungle Guide".
+        rows = [{
+            "Set Name": "Disney Lorcana Promo Cards",
+            "Number": "53",
+            "Printing": "Normal",
+            "Add to Quantity": "5",
+            "Product Name": "Woody - Jungle Guide (Store Championship Participant)",
+            "Ink": "Amber",
+        }]
+        result = _build_dreamborn_rows(rows)
+        assert result["promos"] == []
+        assert result["rows"] == [{
+            "Set Number": 12, "Card Number": "53/P3", "Variant": "normal", "Count": 5,
+        }]
+
+    def test_unknown_promo_goes_to_skipped(self):
+        rows = [{
+            "Set Name": "Disney Lorcana Promo Cards",
+            "Number": "4",
+            "Printing": "Holofoil",
+            "Add to Quantity": "1",
+            "Product Name": "Maleficent - Exultant Spellcaster",
+            "Ink": "Amethyst",
+        }]
+        result = _build_dreamborn_rows(rows)
         assert result["rows"] == []
         assert len(result["promos"]) == 1
-        assert result["promos"][0]["name"] == "Buzz Lightyear - Space Ranger"
+        assert result["promos"][0]["name"] == "Maleficent - Exultant Spellcaster"
 
 
 # ── enrich_csv — refresh_prices ─────────────────────────────────────────────────

@@ -7,7 +7,7 @@ from pathlib import Path
 from .api import (
     ENRICH_FIELDS, OUT_COLS, SETNAME_TO_LJCODE, PROMO_SETCODE, LJ_ONLY_SETS,
     enrich_from_api, enrich_from_lj, pick_lj_card, load_all_data,
-    fetch_tcgcsv_prices,
+    fetch_tcgcsv_prices, resolve_promo_dreamborn_row,
 )
 
 _BLANK = ("", "", "", "", "", "", "", "", "", "")
@@ -228,6 +228,7 @@ def _build_dreamborn_rows(enriched_rows: list[dict]) -> dict:
         set_name = row.get("Set Name", "").strip()
         num_str = row.get("Number", "").strip().split("/")[0].strip()
         printing = row.get("Printing", "").strip()
+        name = row.get("Product Name", "").strip()
         count_str = row.get("Add to Quantity", "").strip()
 
         try:
@@ -236,9 +237,20 @@ def _build_dreamborn_rows(enriched_rows: list[dict]) -> dict:
             count = 0
 
         if set_name == "Disney Lorcana Promo Cards":
-            if count > 0:
-                promos.append({"num": num_str, "name": row.get("Product Name", ""),
+            if count <= 0:
+                continue
+            dreamborn_row = resolve_promo_dreamborn_row(name, num_str)
+            if dreamborn_row is None:
+                promos.append({"num": num_str, "name": name,
                                "printing": printing, "count": count})
+                continue
+            promo_set_num, promo_card_num = dreamborn_row
+            rows.append({
+                "Set Number": promo_set_num,
+                "Card Number": promo_card_num,
+                "Variant": "foil" if printing.lower() in ("holofoil", "cold foil") else "normal",
+                "Count": count,
+            })
             continue
 
         set_num = SET_NUM.get(set_name)
