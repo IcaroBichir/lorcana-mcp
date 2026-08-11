@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.6 — 2026-08-10
+
+Metadata-only release, no code changes. Tightened the `description` field in `pyproject.toml` (PyPI) and `server.json` (MCP Registry / aggregator listings like PulseMCP and Claude Skills Hub) — the old copy ("Connect Claude to Disney Lorcana card data: enrich, search, and analyze decks.") undersold the tool by only mentioning enrichment. New copy calls out the actual breadth (TCGPlayer export enrichment, card lookup/search, automated deck building, collection auditing against live data) to differentiate from thinner competing Lorcana MCP listings.
+
 ## 0.2.5 — 2026-08-10
 
 Add scoped Shift-family synergy detection to `build_deck`, closing the gap 0.2.4 (the keyword-scoring fix) didn't: even scored correctly, a Shift/Duo Shift/Combo Shift payoff was still just one card competing on raw score against the whole pool, with nothing biasing its named enabler(s) toward inclusion. Confirmed empirically against a real Emerald/Sapphire collection build around Mickey Mouse & Minnie Mouse - Adventuring Duo (Duo Shift) — post-0.2.4, it *still* built zero Mickey Mouse or Minnie Mouse-named characters.

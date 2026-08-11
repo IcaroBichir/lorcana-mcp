@@ -1,7 +1,7 @@
 [project]
 name = "lorcana-mcp"
-version = "0.2.5"
-description = "MCP server for enriching Disney Lorcana TCG card collections from TCGPlayer exports"
+version = "0.2.6"
+description = "MCP server for Disney Lorcana TCG: enrich TCGPlayer collection exports, look up and search cards, auto-build legal decks, and audit your collection against live card data"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
