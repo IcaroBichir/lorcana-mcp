@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.IcaroBichir/lorcana",
   "title": "Disney Lorcana TCG Collection",
-  "description": "MCP server for Disney Lorcana TCG: enrich TCGPlayer collection exports, look up and search cards, auto-build legal decks, and audit your collection against live card data.",
+  "description": "MCP server for Disney Lorcana TCG: enrich collections, search cards, build decks, audit data.",
   "repository": {
     "url": "https://github.com/IcaroBichir/lorcana-mcp",
     "source": "github"
