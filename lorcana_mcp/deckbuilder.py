@@ -2,13 +2,24 @@
 from the full LorcanaJSON card pool for a given ink pair, format, and
 (optionally) collection/rotation constraints.
 
-This is a curve/keyword-value heuristic, not a synergy engine — it does not
-detect multi-card combos (see the project CLAUDE.md's "Key combos and
-synergies" section). See `build_deck` in server.py for the tool that wires
-this up and surfaces that caveat to the user.
+This is a curve/keyword-value heuristic, not a general synergy engine — it
+does not detect multi-card combos like the Merlin/Mim Bounce Loop or the
+Steelsong package (see the project CLAUDE.md's "Key combos and synergies"
+section). It does have one scoped piece of synergy awareness: Shift-family
+keywords (Shift, Duo Shift, Combo Shift, Potato Shift, ...) whose target is
+a specific named character/item get a bonus applied to matching enablers
+already in the candidate pool, so a Shift payoff and its base(s) are more
+likely to be built together instead of the payoff losing out to unrelated
+filler on raw score alone (see `compute_shift_synergy`). Floodborn/Madrigal/
+Puppy/Red Panda Shift (subtype-targeted, not name-targeted) and Universal
+Shift (no target) are out of scope for this — see `_shift_target_names`.
+
+See `build_deck` in server.py for the tool that wires this up and surfaces
+these caveats to the user.
 """
 from __future__ import annotations
 
+import re
 from typing import Callable
 
 from .api import _card_colors, dedupe_by_full_name, filter_by_format, is_song, singer_value
@@ -105,6 +116,25 @@ def _keywords_of(card: dict) -> list[str]:
     return [ab.get("keyword", "") for ab in card.get("abilities", []) if ab.get("type") == "keyword"]
 
 
+def _keyword_score(keyword: str) -> float:
+    """Score a single keyword, falling back to a substring match on "shift"
+    for named Shift variants that don't have their own dict entry. Set 13
+    alone introduced Combo Shift, Duo Shift, Potato Shift, Madrigal Shift,
+    Floodborn Shift, Temporary Shift, and Temporary Red Panda Shift, on top
+    of the 311 plain "Shift" cards already in the pool across all sets —
+    every variant is mechanically the same discounted-alternate-cost shape
+    as plain Shift, so they should score the same rather than the 0.0 an
+    exact-match lookup gives anything not spelled exactly "shift". This
+    also future-proofs against whatever new variant name a later set
+    introduces, without needing a new dict entry each time."""
+    key = keyword.lower()
+    if key in _KEYWORD_SCORE:
+        return _KEYWORD_SCORE[key]
+    if "shift" in key:
+        return _KEYWORD_SCORE["shift"]
+    return 0.0
+
+
 def _text_value(card: dict) -> float:
     text = (card.get("fullText") or "").lower()
     return sum(weight for pattern, weight in _ACTION_VALUE_PATTERNS if pattern in text)
@@ -118,7 +148,7 @@ def character_score(card: dict) -> float:
     # Lore is weighted higher — it's the actual win condition.
     stat_total = strength + willpower + lore * 2
     efficiency = stat_total / max(cost, 1)
-    keyword_bonus = sum(_KEYWORD_SCORE.get(k.lower(), 0.0) for k in _keywords_of(card))
+    keyword_bonus = sum(_keyword_score(k) for k in _keywords_of(card))
     sv = singer_value(card)
     singer_bonus = 0.3 * sv if sv else 0.0
     return efficiency + keyword_bonus + singer_bonus
@@ -134,7 +164,7 @@ def action_score(card: dict) -> float:
 def item_location_score(card: dict) -> float:
     cost = card.get("cost") or 0
     value = _text_value(card) * 0.5
-    keyword_bonus = sum(_KEYWORD_SCORE.get(k.lower(), 0.0) for k in _keywords_of(card)) * 0.5
+    keyword_bonus = sum(_keyword_score(k) for k in _keywords_of(card)) * 0.5
     lore = card.get("lore") or 0  # Locations carry a lore value
     return (value + keyword_bonus + lore * 1.5) / max(cost, 1) + 0.25
 
@@ -148,6 +178,150 @@ def score_card(card: dict) -> float:
     if ctype in ("Item", "Location"):
         return item_location_score(card)
     return 0.0
+
+
+# ── Shift-family synergy ────────────────────────────────────────────────────
+
+# Subtype-targeted Shift variants (no specific name to match against — the
+# target is "one of your <Subtype> characters") and Universal Shift (no
+# target restriction at all) are out of scope for name-based matching.
+_SUBTYPE_OR_UNTARGETED_SHIFT_KEYWORDS = {
+    "floodborn shift", "madrigal shift", "puppy shift",
+    "temporary red panda shift", "universal shift",
+}
+
+# Same tier as Ward/Evasive (see _KEYWORD_SCORE) — meaningful but not so
+# large it forces in an otherwise-weak enabler on its own.
+_SHIFT_SYNERGY_BONUS = 2.0
+
+_ITEM_NAMED_RE = re.compile(r"\bitems?\s+named\s+([A-Z][\w'.\- ]*?)(?:[.,]|$)")
+
+
+def _shift_target_names(card: dict) -> tuple[str, str, list[str]] | None:
+    """For a Shift-family character with a *named* target, return
+    (target_type, relation, [required base names]):
+
+    - target_type is "Item" for Potato Shift, else "Character".
+    - relation is "all" (every name must have a match — Duo Shift, the only
+      true AND case) or "any" (at least one match suffices — plain Shift's
+      compound "X or Y" cards, Combo Shift's "one named X, one named Y, or
+      one of each" — the "or one of each" phrasing means either alone is
+      already sufficient).
+
+    Plain, Duo, and Combo Shift never need their reminder text parsed: a
+    solo-named card ("Robin Hood - Champion of Sherwood") always shifts onto
+    that same name, and a compound name joined by " & " or " 'n' " (e.g.
+    "Mickey Mouse & Minnie Mouse - Adventuring Duo",
+    "Chip 'n' Dale - Recovery Rangers") always shifts onto its components
+    individually — LorcanaJSON's own `name` field already gives this with
+    no ambiguity, which sidesteps punctuation edge cases a text regex would
+    trip on (e.g. "Dr. Facilier", "Fix-It Felix, Jr."). Verified against
+    every Shift/Duo Shift/Combo Shift card in the live card pool (2026-08)
+    with zero exceptions. Potato Shift is the one case that does need its
+    target parsed from reminder text, since the item name isn't reflected
+    in the shifting character's own name at all.
+
+    Returns None if the card has no name-targeted Shift-family keyword.
+    """
+    ability = None
+    keyword = ""
+    for ab in card.get("abilities", []):
+        kw = (ab.get("keyword") or "")
+        kw_lower = kw.lower()
+        if ab.get("type") == "keyword" and "shift" in kw_lower:
+            if kw_lower in _SUBTYPE_OR_UNTARGETED_SHIFT_KEYWORDS:
+                return None
+            ability = ab
+            keyword = kw_lower
+            break
+    if ability is None:
+        return None
+
+    if keyword == "potato shift":
+        text = ability.get("reminderText") or ability.get("fullText") or ""
+        m = _ITEM_NAMED_RE.search(text)
+        return ("Item", "any", [m.group(1).strip()]) if m else None
+
+    name = (card.get("name") or "").strip()
+    if not name:
+        return None
+    for sep in (" & ", " 'n' "):
+        if sep in name:
+            parts = [p.strip() for p in name.split(sep) if p.strip()]
+            relation = "all" if keyword == "duo shift" else "any"
+            return ("Character", relation, parts) if parts else None
+    return ("Character", "any", [name])
+
+
+def compute_shift_synergy(pool: list[dict]) -> tuple[dict[str, float], list[dict]]:
+    """Find every name-targeted Shift-family card in `pool` whose target(s)
+    are actually satisfiable from cards also in `pool`, and award a bonus to
+    both the payoff and its matching enabler(s) — mirrors the project
+    CLAUDE.md's own Shift-strategy guidance ("Include 3-4 copies of the
+    cheap base version AND 3-4 copies of the shifted version") instead of
+    letting the payoff compete purely on its own raw stats against unrelated
+    filler. No bonus is awarded for an unreachable combo (a required name
+    with zero pool matches) — that would just reward a dead card.
+
+    Returns (bonus_by_full_name, synergy_info) — synergy_info is a list of
+    dicts describing each detected, satisfiable synergy, for surfacing to
+    the user in the tool's output.
+    """
+    by_char_name: dict[str, list[dict]] = {}
+    by_item_full_name: dict[str, list[dict]] = {}
+    for c in pool:
+        n = (c.get("name") or "").strip().lower()
+        if n:
+            by_char_name.setdefault(n, []).append(c)
+        if c.get("type") == "Item":
+            fn = (c.get("fullName") or "").strip().lower()
+            if fn:
+                by_item_full_name.setdefault(fn, []).append(c)
+
+    bonus: dict[str, float] = {}
+    synergy_info: list[dict] = []
+
+    for card in pool:
+        target = _shift_target_names(card)
+        if target is None:
+            continue
+        target_type, relation, names = target
+        index = by_item_full_name if target_type == "Item" else by_char_name
+        payoff_full_name = card.get("fullName") or ""
+
+        matches: dict[str, list[dict]] = {}
+        for req in names:
+            found = [
+                e for e in index.get(req.lower(), [])
+                if e.get("fullName") != payoff_full_name
+            ]
+            if found:
+                matches[req] = found
+
+        satisfiable = len(matches) == len(names) if relation == "all" else bool(matches)
+        if not satisfiable:
+            continue
+
+        if payoff_full_name:
+            bonus[payoff_full_name] = max(bonus.get(payoff_full_name, 0.0), _SHIFT_SYNERGY_BONUS)
+
+        enabler_names: set[str] = set()
+        for found in matches.values():
+            for enabler in found:
+                key = enabler.get("fullName") or ""
+                if key:
+                    bonus[key] = max(bonus.get(key, 0.0), _SHIFT_SYNERGY_BONUS)
+                    enabler_names.add(key)
+
+        synergy_info.append({
+            "payoff": payoff_full_name,
+            "target_type": target_type,
+            "relation": relation,
+            "required_names": names,
+            "enablers_found": sorted(enabler_names),
+        })
+
+    return bonus, synergy_info
 
 
 # ── Curve targets + allocation ───────────────────────────────────────────────
@@ -193,6 +367,8 @@ def allocate_deck(
     pool: list[dict],
     targets: dict[str, int] | None = None,
     max_copies_fn: Callable[[dict], int] | None = None,
+    synergy_bonus: dict[str, float] | None = None,
+    synergy_info: list[dict] | None = None,
 ) -> list[tuple[dict, int]]:
     """Greedily fill each cost bucket toward its target with the highest-
     scoring cards, respecting `max_copies_fn` (default: always up to 4) and
@@ -200,14 +376,33 @@ def allocate_deck(
     respecting copy/type caps) tries to reach `total` from whatever pool
     remains, so a shortfall reflects a genuine ceiling on the pool — never
     padding with irrelevant fillers to fake a full 60.
+
+    `synergy_bonus` (from `compute_shift_synergy`, keyed by fullName) is
+    added directly into the ranking score. This matters in two ways: it
+    raises a boosted enabler's rank *within its own cost bucket*, so it's
+    more likely to be claimed before the cross-bucket Character type cap
+    runs out during the primary (bucket-order) pass; and since a
+    Character-heavy pool often exhausts that same type cap before the
+    (processed-last) 7+ bucket gets a turn, a boosted payoff's much higher
+    effective score makes it far more likely to be picked up by the
+    backfill pass instead, which ignores the type cap entirely.
+
+    `synergy_info` (from `compute_shift_synergy`) is used for a final
+    guarantee pass over "all"-relation synergies (Duo Shift) only — see
+    `_enforce_all_relation_synergies` for why the bonus alone isn't
+    sufficient there.
     """
     if targets is None:
         targets = curve_targets()
     targets = dict(targets)
     total = sum(targets.values())
     max_copies_fn = max_copies_fn or (lambda c: 4)
+    synergy_bonus = synergy_bonus or {}
 
-    ranked = sorted(pool, key=lambda c: (-score_card(c), c.get("fullName", "")))
+    def _ranked_score(c: dict) -> float:
+        return score_card(c) + synergy_bonus.get(c.get("fullName", ""), 0.0)
+
+    ranked = sorted(pool, key=lambda c: (-_ranked_score(c), c.get("fullName", "")))
 
     by_bucket: dict[str, list[dict]] = {"1-2": [], "3-4": [], "5-6": [], "7+": []}
     for card in ranked:
@@ -264,7 +459,76 @@ def allocate_deck(
                 break
             try_take(card, min(4, total - grand_total), enforce_type_cap=False)
 
+    if synergy_info:
+        picks = _enforce_all_relation_synergies(picks, ranked, max_copies_fn, synergy_info)
+
     return picks
+
+
+def _enforce_all_relation_synergies(
+    picks: list[tuple[dict, int]],
+    ranked: list[dict],
+    max_copies_fn: Callable[[dict], int],
+    synergy_info: list[dict],
+) -> list[tuple[dict, int]]:
+    """A flat scoring bonus is enough for "any"-relation synergies (Combo
+    Shift, compound-name Shift) — landing just one side already makes the
+    combo work. It is NOT reliably enough for "all"-relation synergies
+    (currently just Duo Shift): in a strong, deep pool, one required name's
+    enablers can clear the bar on score alone while the other still loses
+    out to unrelated cards, leaving a picked Duo Shift payoff that can
+    never actually be played for its intended 0-cost Shift since one whole
+    side of the requirement is simply missing from the 60. This closes that
+    gap directly: for every landed "all"-relation payoff, guarantee at
+    least 1 copy of an enabler for every required name, trimming a copy
+    from the current globally-weakest pick to hold the total constant.
+
+    A trimmed pick could, in rare cases, itself be the sole enabler of a
+    different landed synergy — accepted as a known edge case rather than
+    tracked explicitly, since only 1 copy is ever removed (not all of a
+    4-of), so it would take an unlucky exact-single-copy overlap to matter.
+    """
+    picks_map: dict[str, list] = {}
+    order: list[str] = []
+    for card, qty in picks:
+        fn = card.get("fullName", "")
+        if fn not in picks_map:
+            order.append(fn)
+        picks_map[fn] = [card, qty]
+
+    for s in synergy_info:
+        if s["relation"] != "all" or s["payoff"] not in picks_map:
+            continue
+        have_names = {(picks_map[fn][0].get("name") or "").strip() for fn in order}
+        for req in s["required_names"]:
+            if req in have_names:
+                continue
+            candidate = next(
+                (c for c in ranked
+                 if (c.get("name") or "").strip() == req
+                 and c.get("fullName") not in picks_map
+                 and max_copies_fn(c) > 0),
+                None,
+            )
+            if candidate is None:
+                continue
+            weakest_fn = min(
+                (fn for fn in order if fn != s["payoff"] and picks_map[fn][1] > 0),
+                key=lambda fn: score_card(picks_map[fn][0]),
+                default=None,
+            )
+            if weakest_fn is None:
+                continue
+            picks_map[weakest_fn][1] -= 1
+            if picks_map[weakest_fn][1] <= 0:
+                order.remove(weakest_fn)
+                del picks_map[weakest_fn]
+            cand_fn = candidate.get("fullName", "")
+            picks_map[cand_fn] = [candidate, 1]
+            order.append(cand_fn)
+            have_names.add(req)
+
+    return [(picks_map[fn][0], picks_map[fn][1]) for fn in order if picks_map[fn][1] > 0]
 
 
 def summarize_picks(picks: list[tuple[dict, int]]) -> dict:

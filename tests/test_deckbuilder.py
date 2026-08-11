@@ -9,14 +9,18 @@ from lorcana_mcp.deckbuilder import (
     item_location_score,
     curve_targets,
     allocate_deck,
+    compute_shift_synergy,
+    _shift_target_names,
 )
 
 
 def _card(name, cost, ctype, colors, lore=0, strength=0, willpower=0, subtypes=None,
-          keywords=None, full_text="", set_code="12", number=1, rarity="Common", inkwell=True):
+          keywords=None, full_text="", set_code="12", number=1, rarity="Common", inkwell=True,
+          card_name=None):
     abilities = [{"type": "keyword", "keyword": kw} for kw in (keywords or [])]
     return {
         "fullName": name,
+        "name": card_name if card_name is not None else name.split(" - ")[0],
         "cost": cost,
         "type": ctype,
         "colors": colors if len(colors) > 1 else None,
@@ -32,6 +36,18 @@ def _card(name, cost, ctype, colors, lore=0, strength=0, willpower=0, subtypes=N
         "rarity": rarity,
         "inkwell": inkwell,
     }
+
+
+def _shift_card(name, card_name, cost, keyword, reminder_text="", **kw):
+    """A character with a single Shift-family keyword ability, for
+    synergy-detection tests. `card_name` is LorcanaJSON's `name` field
+    (base name before " - subtitle") — the thing `_shift_target_names`
+    actually reads, distinct from the test-helper default in `_card`."""
+    card = _card(name, cost, "Character", ["Emerald"], card_name=card_name, **kw)
+    card["abilities"] = [{
+        "type": "keyword", "keyword": keyword, "reminderText": reminder_text,
+    }]
+    return card
 
 
 def _duels_entry(legality=("core", "infinity")):
@@ -169,6 +185,34 @@ class TestScoreCard:
         weird["type"] = "Mystery"
         assert score_card(weird) == 0.0
 
+    def test_named_shift_variants_score_same_as_plain_shift(self):
+        # Set 13 introduced Duo Shift, Combo Shift, Potato Shift, Madrigal
+        # Shift, Floodborn Shift, Temporary Shift, and Temporary Red Panda
+        # Shift — none spelled exactly "Shift", so an exact-match keyword
+        # lookup would silently score them as 0.0 instead of crediting the
+        # same discounted-alternate-cost value plain Shift gets.
+        base = _card("Base", 4, "Character", ["Emerald"], lore=1, strength=2, willpower=3)
+        plain_shift = _card("Plain Shift", 4, "Character", ["Emerald"], lore=1, strength=2,
+                             willpower=3, keywords=["Shift"])
+        duo_shift = _card("Duo Shift", 4, "Character", ["Emerald"], lore=1, strength=2,
+                           willpower=3, keywords=["Duo Shift"])
+        combo_shift = _card("Combo Shift", 4, "Character", ["Emerald"], lore=1, strength=2,
+                             willpower=3, keywords=["Combo Shift"])
+        potato_shift = _card("Potato Shift", 4, "Character", ["Emerald"], lore=1, strength=2,
+                              willpower=3, keywords=["Potato Shift"])
+        assert score_card(duo_shift) == score_card(plain_shift) > score_card(base)
+        assert score_card(combo_shift) == score_card(plain_shift)
+        assert score_card(potato_shift) == score_card(plain_shift)
+
+    def test_unrelated_keyword_still_scores_zero_bonus(self):
+        # Guards against the substring fallback being too broad — a keyword
+        # that merely happens to not be in the dict (and doesn't contain
+        # "shift") must still score 0.0, not fall through to the Shift value.
+        base = _card("Base", 3, "Character", ["Amber"], lore=1, strength=2, willpower=2)
+        unknown_kw = _card("Unknown Keyword", 3, "Character", ["Amber"], lore=1, strength=2,
+                            willpower=2, keywords=["Totally Made Up Keyword"])
+        assert score_card(unknown_kw) == score_card(base)
+
 
 # ── curve_targets ────────────────────────────────────────────────────────────────
 
@@ -276,3 +320,203 @@ class TestAllocateDeck:
 
     def test_empty_pool_returns_no_picks(self):
         assert allocate_deck([]) == []
+
+
+# ── _shift_target_names ─────────────────────────────────────────────────────
+
+class TestShiftTargetNames:
+    def test_plain_solo_name_shift(self):
+        card = _shift_card("Robin Hood - Champion of Sherwood", "Robin Hood", 5, "Shift")
+        assert _shift_target_names(card) == ("Character", "any", ["Robin Hood"])
+
+    def test_compound_ampersand_name_is_any_relation_for_plain_shift(self):
+        card = _shift_card("Aladdin & Genie - Mischievous Pals", "Aladdin & Genie", 3, "Shift")
+        assert _shift_target_names(card) == ("Character", "any", ["Aladdin", "Genie"])
+
+    def test_apostrophe_n_separator(self):
+        card = _shift_card("Chip 'n' Dale - Recovery Rangers", "Chip 'n' Dale", 5, "Shift")
+        assert _shift_target_names(card) == ("Character", "any", ["Chip", "Dale"])
+
+    def test_duo_shift_is_all_relation(self):
+        card = _shift_card(
+            "Mickey Mouse & Minnie Mouse - Adventuring Duo",
+            "Mickey Mouse & Minnie Mouse", 7, "Duo Shift",
+        )
+        assert _shift_target_names(card) == (
+            "Character", "all", ["Mickey Mouse", "Minnie Mouse"],
+        )
+
+    def test_combo_shift_is_any_relation(self):
+        card = _shift_card(
+            "Dash Parr & Violet Parr - Super Siblings",
+            "Dash Parr & Violet Parr", 8, "Combo Shift",
+        )
+        assert _shift_target_names(card) == (
+            "Character", "any", ["Dash Parr", "Violet Parr"],
+        )
+
+    def test_potato_shift_targets_an_item_parsed_from_reminder_text(self):
+        card = _shift_card(
+            "Posey - Vampire Potato", "Posey", 7, "Potato Shift",
+            reminder_text="You may pay 5 ⬡ to play this on top of one of your items named Potato.",
+        )
+        assert _shift_target_names(card) == ("Item", "any", ["Potato"])
+
+    def test_subtype_targeted_shift_variants_return_none(self):
+        for keyword, subtype_text in [
+            ("Floodborn Shift", "one of your Floodborn characters"),
+            ("Madrigal Shift", "one of your Madrigal characters"),
+            ("Puppy Shift", "one of your Puppy characters"),
+            ("Temporary Red Panda Shift", "one of your Red Panda characters"),
+            ("Universal Shift", "any one of your characters"),
+        ]:
+            card = _shift_card("Whatever - Subtitle", "Whatever", 4, keyword,
+                                reminder_text=f"You may pay 4 ⬡ to play this on top of {subtype_text}.")
+            assert _shift_target_names(card) is None, keyword
+
+    def test_non_shift_card_returns_none(self):
+        card = _card("Vanilla - Body", 3, "Character", ["Amber"], keywords=["Evasive"])
+        assert _shift_target_names(card) is None
+
+
+# ── compute_shift_synergy ────────────────────────────────────────────────────
+
+class TestComputeShiftSynergy:
+    def test_bonus_and_info_when_payoff_and_enabler_both_in_pool(self):
+        payoff = _shift_card(
+            "Mickey Mouse & Minnie Mouse - Adventuring Duo",
+            "Mickey Mouse & Minnie Mouse", 7, "Duo Shift",
+        )
+        mickey = _card("Mickey Mouse - Inquisitive Explorer", 4, "Character", ["Sapphire"],
+                        card_name="Mickey Mouse")
+        minnie = _card("Minnie Mouse - Curious Adventurer", 1, "Character", ["Emerald"],
+                        card_name="Minnie Mouse")
+        bonus, info = compute_shift_synergy([payoff, mickey, minnie])
+
+        assert bonus[payoff["fullName"]] > 0
+        assert bonus[mickey["fullName"]] > 0
+        assert bonus[minnie["fullName"]] > 0
+        assert len(info) == 1
+        assert info[0]["payoff"] == payoff["fullName"]
+        assert info[0]["relation"] == "all"
+        assert set(info[0]["enablers_found"]) == {mickey["fullName"], minnie["fullName"]}
+
+    def test_no_bonus_for_all_relation_missing_one_side(self):
+        # Duo Shift needs BOTH names — only Mickey present means the combo
+        # genuinely can't be assembled, so nothing should be rewarded for it.
+        payoff = _shift_card(
+            "Mickey Mouse & Minnie Mouse - Adventuring Duo",
+            "Mickey Mouse & Minnie Mouse", 7, "Duo Shift",
+        )
+        mickey = _card("Mickey Mouse - Inquisitive Explorer", 4, "Character", ["Sapphire"],
+                        card_name="Mickey Mouse")
+        bonus, info = compute_shift_synergy([payoff, mickey])
+
+        assert bonus == {}
+        assert info == []
+
+    def test_bonus_for_any_relation_with_only_one_side_present(self):
+        # Combo Shift's "one named X, one named Y, or one of each" means
+        # either alone is already sufficient.
+        payoff = _shift_card(
+            "Dash Parr & Violet Parr - Super Siblings",
+            "Dash Parr & Violet Parr", 8, "Combo Shift",
+        )
+        dash = _card("Dash Parr - Dodgeball Dynamo", 1, "Character", ["Ruby"],
+                      card_name="Dash Parr")
+        bonus, info = compute_shift_synergy([payoff, dash])
+
+        assert bonus[payoff["fullName"]] > 0
+        assert bonus[dash["fullName"]] > 0
+        assert info[0]["relation"] == "any"
+        assert info[0]["enablers_found"] == [dash["fullName"]]
+
+    def test_no_synergy_entries_when_pool_has_no_shift_cards(self):
+        vanilla = _card("Vanilla - Body", 3, "Character", ["Amber"])
+        bonus, info = compute_shift_synergy([vanilla])
+        assert bonus == {}
+        assert info == []
+
+
+# ── allocate_deck: "all"-relation synergy guarantee ─────────────────────────
+
+class TestAllocateDeckSynergyGuarantee:
+    def test_bonus_alone_can_leave_a_weak_enabler_out(self):
+        # Baseline: without synergy_info, only the scoring bonus applies —
+        # a sufficiently weak enabler can still lose out to unrelated cards
+        # on raw score, same as the real Mickey/Minnie case this was built
+        # to fix.
+        payoff = _shift_card(
+            "Mickey Mouse & Minnie Mouse - Adventuring Duo",
+            "Mickey Mouse & Minnie Mouse", 7, "Duo Shift",
+            lore=5, strength=5, willpower=5,
+        )
+        strong1 = _card("Strong Filler 1", 1, "Character", ["Emerald"], strength=4, willpower=4, lore=2)
+        strong2 = _card("Strong Filler 2", 1, "Character", ["Emerald"], strength=3, willpower=4, lore=2)
+        mickey = _card("Mickey Mouse - Inquisitive Explorer", 1, "Character", ["Emerald"],
+                        card_name="Mickey Mouse", strength=2, willpower=3, lore=1)
+        neutral = _card("Neutral Weak Filler", 1, "Character", ["Emerald"], strength=1, willpower=2, lore=1)
+        minnie = _card("Minnie Mouse - Curious Adventurer", 1, "Character", ["Emerald"],
+                        card_name="Minnie Mouse", strength=1, willpower=1, lore=0)
+        pool = [payoff, strong1, strong2, mickey, neutral, minnie]
+        targets = {"1-2": 4, "3-4": 0, "5-6": 0, "7+": 1}
+
+        bonus, info = compute_shift_synergy(pool)
+        picks = allocate_deck(pool, targets=targets, max_copies_fn=lambda c: 1,
+                               synergy_bonus=bonus)  # no synergy_info -> no guarantee pass
+        picked_names = {c["fullName"] for c, _ in picks}
+
+        assert payoff["fullName"] in picked_names
+        assert mickey["fullName"] in picked_names
+        assert minnie["fullName"] not in picked_names  # the gap this feature closes
+        assert sum(q for _, q in picks) == 5
+
+    def test_synergy_info_guarantees_the_missing_side_is_added(self):
+        payoff = _shift_card(
+            "Mickey Mouse & Minnie Mouse - Adventuring Duo",
+            "Mickey Mouse & Minnie Mouse", 7, "Duo Shift",
+            lore=5, strength=5, willpower=5,
+        )
+        strong1 = _card("Strong Filler 1", 1, "Character", ["Emerald"], strength=4, willpower=4, lore=2)
+        strong2 = _card("Strong Filler 2", 1, "Character", ["Emerald"], strength=3, willpower=4, lore=2)
+        mickey = _card("Mickey Mouse - Inquisitive Explorer", 1, "Character", ["Emerald"],
+                        card_name="Mickey Mouse", strength=2, willpower=3, lore=1)
+        neutral = _card("Neutral Weak Filler", 1, "Character", ["Emerald"], strength=1, willpower=2, lore=1)
+        minnie = _card("Minnie Mouse - Curious Adventurer", 1, "Character", ["Emerald"],
+                        card_name="Minnie Mouse", strength=1, willpower=1, lore=0)
+        pool = [payoff, strong1, strong2, mickey, neutral, minnie]
+        targets = {"1-2": 4, "3-4": 0, "5-6": 0, "7+": 1}
+
+        bonus, info = compute_shift_synergy(pool)
+        picks = allocate_deck(pool, targets=targets, max_copies_fn=lambda c: 1,
+                               synergy_bonus=bonus, synergy_info=info)
+        picked_names = {c["fullName"] for c, _ in picks}
+
+        assert payoff["fullName"] in picked_names
+        assert mickey["fullName"] in picked_names
+        assert minnie["fullName"] in picked_names  # forced in by the guarantee pass
+        assert sum(q for _, q in picks) == 5  # total held constant
+        # The weakest kept filler (Neutral Weak Filler) is what got trimmed
+        # to make room, not the Mickey enabler or either strong filler.
+        assert "Neutral Weak Filler" not in picked_names
+        assert strong1["fullName"] in picked_names
+        assert strong2["fullName"] in picked_names
+
+    def test_guarantee_pass_is_a_noop_without_a_landed_payoff(self):
+        # If the payoff itself never made it into the deck, there's nothing
+        # to guarantee enablers for.
+        mickey = _card("Mickey Mouse - Inquisitive Explorer", 1, "Character", ["Emerald"],
+                        card_name="Mickey Mouse", strength=1, willpower=1, lore=1)
+        minnie = _card("Minnie Mouse - Curious Adventurer", 1, "Character", ["Emerald"],
+                        card_name="Minnie Mouse", strength=1, willpower=1, lore=0)
+        payoff = _shift_card(
+            "Mickey Mouse & Minnie Mouse - Adventuring Duo",
+            "Mickey Mouse & Minnie Mouse", 7, "Duo Shift",
+        )
+        pool = [mickey, minnie]  # payoff deliberately excluded from the pool
+        info = compute_shift_synergy(pool)[1]
+        assert info == []  # nothing to detect without the payoff present
+
+        picks = allocate_deck(pool, targets={"1-2": 2, "3-4": 0, "5-6": 0, "7+": 0},
+                               max_copies_fn=lambda c: 1, synergy_info=info)
+        assert sum(q for _, q in picks) == 2

@@ -15,7 +15,10 @@ from .api import (
 )
 from .enricher import enrich_csv as _enrich_csv, audit_csv as _audit_csv, _num_int
 from .deck import analyze_deck as _analyze_deck, what_am_i_missing as _what_am_i_missing
-from .deckbuilder import build_candidate_pool, allocate_deck, rotation_safe_set_codes, summarize_picks
+from .deckbuilder import (
+    build_candidate_pool, allocate_deck, rotation_safe_set_codes, summarize_picks,
+    compute_shift_synergy,
+)
 
 mcp = FastMCP(
     "Lorcana",
@@ -885,10 +888,13 @@ def what_am_i_missing(deck_list: str, collection_csv: str) -> str:
 
 _BUILD_DECK_DISCLAIMER = (
     "_This is a heuristic curve/keyword-value deck builder — it optimizes ink curve, "
-    "stat efficiency, and keyword value, but it does not detect multi-card combos or "
-    "synergy packages (e.g. the Merlin/Mim Bounce Loop, the Steelsong package — see "
-    "CLAUDE.md's \"Key combos and synergies\"). Review the decklist before playing; "
-    "swap in known synergy pieces manually._"
+    "stat efficiency, and keyword value. It has one scoped piece of synergy awareness "
+    "(named Shift/Duo Shift/Combo Shift/Potato Shift payoffs get boosted alongside their "
+    "matching enablers — see \"Shift synergies built together\" above, if any landed), but "
+    "it still does not detect general multi-card combos or synergy packages (e.g. the "
+    "Merlin/Mim Bounce Loop, the Steelsong package, subtype-targeted Shift like Floodborn/"
+    "Madrigal/Puppy/Red Panda Shift — see CLAUDE.md's \"Key combos and synergies\"). Review "
+    "the decklist before playing; swap in known synergy pieces manually._"
 )
 
 
@@ -1012,7 +1018,11 @@ def build_deck(
         return min(4, owned_counts.get((card.get("fullName") or "").lower(), 0))
 
     max_copies_fn = _collection_max_copies if mode == "collection" else None
-    picks = allocate_deck(pool, max_copies_fn=max_copies_fn)
+    synergy_bonus, synergy_info = compute_shift_synergy(pool)
+    picks = allocate_deck(
+        pool, max_copies_fn=max_copies_fn,
+        synergy_bonus=synergy_bonus, synergy_info=synergy_info,
+    )
     total_cards = sum(qty for _, qty in picks)
 
     if not picks:
@@ -1040,6 +1050,18 @@ def build_deck(
     lines.extend(f"{qty}x {card.get('fullName', '')}" for card, qty in sorted_picks)
     lines.append("```")
     lines.append("")
+
+    picked_names = {card.get("fullName") for card, _ in sorted_picks}
+    landed_synergies = [
+        s for s in synergy_info
+        if s["payoff"] in picked_names and any(e in picked_names for e in s["enablers_found"])
+    ]
+    if landed_synergies:
+        lines.append("### Shift synergies built together")
+        for s in landed_synergies:
+            enablers_in = [e for e in s["enablers_found"] if e in picked_names]
+            lines.append(f"- **{s['payoff']}** ← {', '.join(enablers_in)}")
+        lines.append("")
 
     stats = summarize_picks(sorted_picks)
     curve = stats["curve"]
