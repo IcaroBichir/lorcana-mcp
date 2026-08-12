@@ -5,6 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![MCP Registry](https://img.shields.io/badge/MCP_Registry-listed-blue)](https://registry.modelcontextprotocol.io/servers/io.github.IcaroBichir/lorcana)
 [![mcp.so](https://img.shields.io/badge/mcp.so-lorcana--mcp-orange)](https://mcp.so/server/lorcana-mcp)
+[![lorcana-mcp MCP server](https://glama.ai/mcp/servers/IcaroBichir/lorcana-mcp/badges/score.svg)](https://glama.ai/mcp/servers/IcaroBichir/lorcana-mcp)
 
 MCP server that connects Claude to Disney Lorcana card data. Export your collection from TCGPlayer, hand it to Claude, and get it fully enriched with ink cost, stats, keywords, abilities, and format legality — plus a ready-to-import file for [dreamborn.ink](https://dreamborn.ink).
 
