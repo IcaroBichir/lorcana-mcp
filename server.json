@@ -7,12 +7,12 @@
     "url": "https://github.com/IcaroBichir/lorcana-mcp",
     "source": "github"
   },
-  "version": "0.2.7",
+  "version": "0.2.8",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "lorcana-mcp",
-      "version": "0.2.7",
+      "version": "0.2.8",
       "runtime": "python",
       "transport": {
         "type": "stdio"

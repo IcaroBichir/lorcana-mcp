@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.8 — 2026-08-12
+
+No code changes. Adds a CI workflow (`.github/workflows/tests.yml`) that runs the full 278-test suite on Python 3.11, 3.12, and 3.13 for every pull request and every push to `main` — previously all 278 tests only ran manually, which is exactly how the `mcp` 2.0.0 break fixed in 0.2.7 went unnoticed until a live Glama build failed. README updated with a Tests badge and a corrected test count (was showing a stale "205 tests").
+
 ## 0.2.7 — 2026-08-12
 
 Fix a fresh-install crash: `pyproject.toml` pinned `mcp[cli]>=1.0.0` with no upper bound. `mcp` 2.0.0 released today (2026-08-12) and removed `mcp.server.fastmcp` entirely, renaming the class to `MCPServer` at `mcp.server.mcpserver.MCPServer`. `lorcana_mcp/server.py` still imports `from mcp.server.fastmcp import FastMCP`, so any environment resolving dependencies fresh — `pip install lorcana-mcp`, `uv sync` with no lockfile, Glama's Docker-based server builds — picked up `mcp` 2.0.0 and crashed with `ModuleNotFoundError: No module named 'mcp.server.fastmcp'` on startup. Existing installs with `mcp` already pinned to a 1.x version in their own environment were unaffected.
