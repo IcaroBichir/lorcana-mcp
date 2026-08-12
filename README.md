@@ -4,7 +4,7 @@
 [![PyPI](https://img.shields.io/pypi/v/lorcana-mcp)](https://pypi.org/project/lorcana-mcp/)
 [![Python](https://img.shields.io/pypi/pyversions/lorcana-mcp)](https://pypi.org/project/lorcana-mcp/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![MCP Registry](https://img.shields.io/badge/MCP_Registry-listed-blue)](https://registry.modelcontextprotocol.io/servers/io.github.IcaroBichir/lorcana)
+[![MCP Registry](https://img.shields.io/badge/MCP_Registry-listed-blue)](https://registry.modelcontextprotocol.io/?q=lorcana)
 [![mcp.so](https://img.shields.io/badge/mcp.so-lorcana--mcp-orange)](https://mcp.so/server/lorcana-mcp)
 [![lorcana-mcp MCP server](https://glama.ai/mcp/servers/IcaroBichir/lorcana-mcp/badges/score.svg)](https://glama.ai/mcp/servers/IcaroBichir/lorcana-mcp)
 
@@ -73,7 +73,7 @@ Ten tools are available in Claude once the server is running:
 
 | Directory | Link |
 |---|---|
-| MCP Registry (official) | [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io/servers/io.github.IcaroBichir/lorcana) |
+| MCP Registry (official) | [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io/?q=lorcana) |
 | mcp.so | [mcp.so/server/lorcana-mcp](https://mcp.so/server/lorcana-mcp) |
 | PyPI | [pypi.org/project/lorcana-mcp](https://pypi.org/project/lorcana-mcp/) |
 
