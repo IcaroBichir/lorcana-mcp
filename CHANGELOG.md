@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.7 — 2026-08-12
+
+Fix a fresh-install crash: `pyproject.toml` pinned `mcp[cli]>=1.0.0` with no upper bound. `mcp` 2.0.0 released today (2026-08-12) and removed `mcp.server.fastmcp` entirely, renaming the class to `MCPServer` at `mcp.server.mcpserver.MCPServer`. `lorcana_mcp/server.py` still imports `from mcp.server.fastmcp import FastMCP`, so any environment resolving dependencies fresh — `pip install lorcana-mcp`, `uv sync` with no lockfile, Glama's Docker-based server builds — picked up `mcp` 2.0.0 and crashed with `ModuleNotFoundError: No module named 'mcp.server.fastmcp'` on startup. Existing installs with `mcp` already pinned to a 1.x version in their own environment were unaffected.
+
+Found while debugging a failing Glama admin build/test for this server (see `glama.json`, added in 0.2.6-adjacent work) — the container's `uv sync` had no lockfile to pin against and resolved straight to the new major version.
+
+Fix: pin `mcp[cli]>=1.0.0,<2.0.0` in `pyproject.toml`. No code changes — migrating to `mcp` 2.0.0's `MCPServer` API is a separate, deliberately deferred task (v2.0.0 released same-day as this fix; needs a full audit of what else changed beyond the `FastMCP` rename, plus retesting all 10 tools, before treating it as safe).
+
 ## 0.2.6 — 2026-08-10
 
 Metadata-only release, no code changes. Tightened the `description` field in `pyproject.toml` (PyPI) and `server.json` (MCP Registry / aggregator listings like PulseMCP and Claude Skills Hub) — the old copy ("Connect Claude to Disney Lorcana card data: enrich, search, and analyze decks.") undersold the tool by only mentioning enrichment. New copy calls out the actual breadth (TCGPlayer export enrichment, card lookup/search, automated deck building, collection auditing against live data) to differentiate from thinner competing Lorcana MCP listings.
