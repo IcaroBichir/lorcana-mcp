@@ -1,5 +1,6 @@
 # lorcana-mcp
 
+[![Tests](https://github.com/IcaroBichir/lorcana-mcp/actions/workflows/tests.yml/badge.svg)](https://github.com/IcaroBichir/lorcana-mcp/actions/workflows/tests.yml)
 [![PyPI](https://img.shields.io/pypi/v/lorcana-mcp)](https://pypi.org/project/lorcana-mcp/)
 [![Python](https://img.shields.io/pypi/pyversions/lorcana-mcp)](https://pypi.org/project/lorcana-mcp/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -315,7 +316,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-205 tests, no network calls required.
+278 tests, no network calls required. CI runs the full suite on Python 3.11, 3.12, and 3.13 on every pull request and on push to `main` (see [`.github/workflows/tests.yml`](.github/workflows/tests.yml)).
 
 ---
 
