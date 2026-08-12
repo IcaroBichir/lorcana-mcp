@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.9 — 2026-08-12
+
+Fix a broken link in README.md: the MCP Registry badge and "Listed on" table both pointed to `https://registry.modelcontextprotocol.io/servers/io.github.IcaroBichir/lorcana`, which 404s — that domain has no per-server webpage at all, only raw JSON API routes (`/v0/servers/...`). Replaced with the registry's actual homepage, pre-filled via its `?q=` search param: `https://registry.modelcontextprotocol.io/?q=lorcana`, confirmed working. Also found and fixed the underlying cause of why this went unnoticed: the MCP Registry listing itself was silently 2 releases stale (still serving 0.2.6 while PyPI was on 0.2.8) because the registry's CLI auth token had expired and nothing re-published after — re-authenticated and republished during this release.
+
 ## 0.2.8 — 2026-08-12
 
 No code changes. Adds a CI workflow (`.github/workflows/tests.yml`) that runs the full 278-test suite on Python 3.11, 3.12, and 3.13 for every pull request and every push to `main` — previously all 278 tests only ran manually, which is exactly how the `mcp` 2.0.0 break fixed in 0.2.7 went unnoticed until a live Glama build failed. README updated with a Tests badge and a corrected test count (was showing a stale "205 tests").
