@@ -135,15 +135,43 @@ def _price_missing_entries(entries: list[dict], owned_prices: dict[str, float]) 
 @mcp.tool()
 def enrich_csv(input_path: str, cache_path: str = "", refresh_prices: bool = False) -> str:
     """
-    Enrich a raw TCGPlayer Lorcana CSV export with full card data.
+    Enrich a raw TCGPlayer Lorcana CSV export with full card data — the
+    required first step before any other tool here can read your collection
+    (`filter_collection`, `audit_csv`, `what_am_i_missing`, `build_deck`, and
+    `find_song_synergies`'s `collection_csv` all expect this tool's output,
+    not the raw TCGPlayer export).
 
-    Fetches card data from LorcanaJSON and lorcana-api.com and adds Ink color,
-    Ink Cost, Card Type, Subtypes, Strength, Willpower, Lore Points, Inkable,
-    Keywords, and Abilities to each row.
+    Fetches card data from LorcanaJSON (sets 12+) and lorcana-api.com (sets
+    1–11) and adds Ink color, Ink Cost, Card Type, Subtypes, Strength,
+    Willpower, Lore Points, Inkable, Keywords, and Abilities to each row. Both
+    sources are disk-cached 24h, so a second run soon after the first is
+    fast regardless of `cache_path`.
+
+    Behavior: writes two new files next to the input — never modifies
+    `input_path` itself — and always reports fill-rate stats per column plus
+    any cards it couldn't match (usually a name typo in the export, or a
+    brand-new card the APIs haven't indexed yet). Promo cards (Set Name
+    "Disney Lorcana Promo Cards") are matched by name against their
+    non-promo equivalent for stats, and separately resolved to a
+    dreamborn.ink-importable `(Set Number, Card Number)` row when this
+    server's built-in promo table covers that card; promos it doesn't
+    recognize are listed for manual entry rather than guessed. `cache_path`
+    only skips re-fetching for card names already present in that prior
+    enriched CSV — it does not skip enrichment for new cards in the input.
 
     Writes two output files next to the input:
       enriched_{filename}  — enriched collection CSV
       dreamborn_{filename} — import-ready CSV for dreamborn.ink
+
+    Usage guidelines: run this on every fresh TCGPlayer export before doing
+    anything else with it. Pass `cache_path` pointing at your previous
+    enriched CSV on a re-export to speed things up — otherwise every row
+    re-fetches from the API even for cards you've already enriched before.
+    Use `refresh_prices=True` specifically to bring an existing enriched
+    CSV's prices current without a fresh TCGPlayer export (it only touches
+    the price column, not the card-data columns); leave it off for a
+    same-day fresh export, since the TCGPlayer download already has current
+    prices and refreshing adds an extra tcgcsv.com call per row.
 
     Args:
         input_path: Absolute path to the raw TCGPlayer CSV export.
@@ -264,12 +292,29 @@ def _format_card_detail(card: dict) -> str:
 @mcp.tool()
 def lookup_card(name: str, set_name: str = "") -> str:
     """
-    Look up a Lorcana card by name and return its full stats, abilities, and legality.
+    Look up one specific, already-known Lorcana card by (near-)exact name and
+    return its full stats, abilities, and format legality in one call.
 
-    Searches LorcanaJSON for an exact name match, then falls back to partial match.
-    Supplements with duels.ink data for format legality, structured abilities,
-    and card image URL. If the same card exists in multiple sets, the most recent
-    printing is returned unless set_name is specified.
+    Behavior: tries an exact name match against LorcanaJSON first, then falls
+    back to a plain substring match — this is simple matching, not fuzzy
+    scoring. If the same card name exists across multiple sets/printings and
+    `set_name` isn't given, it silently returns the most recent printing
+    rather than listing the alternatives (Enchanted/Epic/promo variants are
+    gameplay-identical to the base card either way, so this rarely matters
+    for stats — but a specific older printing's card ID/legality nuance won't
+    surface without `set_name`). Card data (LorcanaJSON + duels.ink) is
+    fetched live and cached on disk for 24h — see `lorcana-mcp cache stats` /
+    `cache clear` if you suspect stale data right after a new set drops.
+
+    Usage guidelines: reach for this first when you already have a specific
+    printed card name (even with the subtitle omitted, e.g. "Mirage") — it's
+    the cheapest, most precise lookup. If it returns "no card found" for a
+    name you're unsure is spelled/formatted correctly (informal phrasing,
+    missing dashes, a likely typo, or a bare first name meant to cover several
+    printings), retry with `resolve_card` instead, which fuzzy-matches and
+    will disambiguate multiple candidates rather than failing outright. For
+    browsing/filtering many cards by criteria instead of one known name, use
+    `search_cards`.
 
     Args:
         name: Card name, e.g. "Mirage - Super Recruiter" or just "Mirage".
@@ -340,10 +385,34 @@ def search_cards(
     limit: int = 25,
 ) -> str:
     """
-    Search the full Lorcana card pool by any combination of filters.
+    Search the full Lorcana card pool (all sets, every printed card) by any
+    combination of filters — not your collection. This is a discovery tool for
+    "what cards fit X criteria", independent of what you own or have priced.
 
     All filters are optional and ANDed together, except colors: a card matches
     if it has ANY of the given colors, so dual-ink cards surface for either half.
+    Calling with no filters at all returns the entire card pool, paginated.
+
+    Behavior: always fetches from a live, in-process-cached copy of
+    LorcanaJSON (see the "Card data APIs" reference) — never reads a local CSV,
+    so results always include the newest released set. A card that has no
+    Strength/Willpower/Lore (Action, Item, Location) shows "—" for those
+    stats rather than being excluded. Results are grouped and displayed by ink
+    color, then returned as one or more Markdown tables; when more results
+    exist than `limit`, the response tells you the exact `offset` to pass next
+    — call again with that offset rather than guessing pages.
+
+    Usage guidelines: use this to browse/filter by criteria (e.g. "every
+    Evasive Sapphire character costing 3 or less") — if you already have a
+    specific (possibly misspelled or subtitle-less) card name in mind, use
+    `resolve_card` or `lookup_card` instead, they're cheaper and more precise
+    for a single known card. Results carry no ownership or price information;
+    to check what you already own, cross-reference the card names against an
+    enriched collection CSV yourself, or use `what_am_i_missing` /
+    `find_song_synergies`'s `collection_csv` param for tools that do that
+    automatically. To narrow to a specific play format's legal pool, combine
+    with `set_name`, or post-filter the result against `filter_collection`'s
+    format logic.
 
     Args:
         colors: Comma-separated ink color(s), e.g. "Amber,Steel". Case-insensitive.
@@ -445,19 +514,27 @@ def find_song_synergies(
     limit: int = 50,
 ) -> str:
     """
-    Find every Character that can sing a given song, for free-song Singer combos.
+    Find every Character that can sing a given song — the tool for building or
+    checking a Singer/song combo (e.g. the Amber/Steel Steelsong package), not
+    for general card search (use `search_cards` for that).
 
     A character can sing a song if its printed ink cost meets the song's cost
     outright, OR it has a "Singer X" keyword with X meeting the song's cost —
     Singer lets a cheap character punch above its actual cost for singing
     purposes only (see the Steelsong package: Amber Singers unlocking
     expensive Steel songs for free). Provide either song_name (resolved the
-    same fuzzy way as resolve_card) or a raw cost threshold — not both.
+    same fuzzy way as resolve_card, so "beauty and beast" or a slight typo
+    still works) or a raw cost threshold — exactly one is required; passing
+    neither, or both, returns an error message instead of guessing.
 
     Results are grouped: Singer-keyword characters first (the actual
     "discount" picks — highest Singer value, then cheapest actual cost),
     followed by characters that simply cost enough to sing it outright,
-    cheapest first.
+    cheapest first. This only tells you who *can* sing — it doesn't check
+    whether that character is otherwise good (stats, other abilities) or
+    whether you own enough copies to make the combo consistent unless you
+    pass `collection_csv`, in which case each result is annotated with owned
+    quantity so you can see the combo's real consistency at a glance.
 
     Args:
         song_name: Name of a Song card, e.g. "Be Our Guest". Fuzzy-matched.
@@ -555,11 +632,35 @@ def find_song_synergies(
 @mcp.tool()
 def filter_collection(csv_path: str, format: str = "core") -> str:
     """
-    Filter an enriched collection CSV to cards legal in a specific play format.
+    Filter an enriched collection CSV down to the cards you own that are legal
+    in a specific play format — answers "which of my cards can I actually play
+    in format X", grouped by ink color with owned quantities.
 
-    Legality data comes from duels.ink, which tracks Core EN, Infinity, Core ZH,
-    and Core JA rotation. Poorcana (Common/Uncommon only, 50-card min) is derived
-    from the Rarity column in the CSV — no external lookup needed.
+    Legality data comes from a live duels.ink fetch, which tracks Core EN,
+    Infinity, Core ZH, and Core JA rotation. Poorcana (Common/Uncommon only,
+    50-card min) is the one exception: it's derived purely from the CSV's own
+    Rarity column, no external lookup, so it still works offline and always
+    reflects the CSV's rarity data exactly.
+
+    Behavior: promo rows (Set Name == "Disney Lorcana Promo Cards") are always
+    excluded from Core/Infinity/regional results, not flagged as illegal —
+    duels.ink's legality table is keyed by (set, number) and promos don't map
+    onto that cleanly (see "Promo cards" in the reference doc). Any other row
+    duels.ink doesn't recognize (usually a card from a set duels.ink hasn't
+    indexed yet) is silently skipped and counted in a "rows skipped" footer —
+    that's a data-lag note, not a legality verdict, so don't read a skipped
+    row as "illegal". Requires the enriched CSV's columns (Set Name, Number,
+    Ink, Ink Cost, Add to Quantity, etc.) — running this against the raw
+    TCGPlayer export (pre-`enrich_csv`) will silently undercount or return
+    nothing useful.
+
+    Usage guidelines: run this when you want to see your full legal card pool
+    for a format before hand-building a deck, or to sanity-check whether a
+    deck idea is even feasible with what you own. If you want a finished
+    decklist rather than just the eligible pool, use `build_deck` with
+    `mode="collection"` instead — it already applies this same legality
+    filter internally as part of assembling a curve-balanced list, so you
+    don't need to call both.
 
     Args:
         csv_path: Absolute path to an enriched Lorcana collection CSV.
@@ -705,11 +806,33 @@ def _filter_poorcana(rows: list[dict]) -> str:
 @mcp.tool()
 def audit_csv(csv_path: str) -> str:
     """
-    Audit an enriched Lorcana collection CSV against live API data.
+    Audit an already-enriched Lorcana collection CSV against live API data and
+    report exactly which fields drifted from the current source of truth —
+    a correctness check on data already in the CSV, not a re-enrichment.
 
     Checks Ink color, Ink Cost, Card Type, Subtypes, Inkable, and stats
-    (Strength / Willpower / Lore Points) for every non-promo card. Useful after
-    a new set releases or if enrichment data looks suspicious.
+    (Strength / Willpower / Lore Points) for every non-promo card, one live
+    API call per unique card. Promo rows are always skipped entirely (counted
+    separately as "promos skipped") since there's no reliable live source to
+    diff a promo printing against. Ability/Keyword text is not checked — only
+    the structured fields above.
+
+    Behavior: reports every field-level mismatch as `"csv_value" →
+    "api_value"`, grouped by card. One known, harmless false-positive class:
+    Subtypes differences that are purely separator/ordering (e.g.
+    `"Storyborn/Ally/Toy"` vs `"Storyborn, Ally, Toy"`) — same data, different
+    formatting convention, most common in newer sets. Skim for those before
+    treating every reported line as a real error. A completely clean CSV
+    returns a one-line "no discrepancies found" summary instead of an empty
+    list.
+
+    Usage guidelines: run this after a new set releases, after any manual CSV
+    edits, or whenever enrichment output looks suspicious — not as a routine
+    step after every `enrich_csv` call, since it re-fetches from the live API
+    per unique card and adds real latency on a large collection. If it turns
+    up genuine (non-Subtypes-formatting) discrepancies, the fix is to re-run
+    `enrich_csv`, not to hand-edit the CSV — this tool only reports drift, it
+    does not write any changes back to the file.
 
     Args:
         csv_path: Absolute path to an enriched Lorcana collection CSV.
@@ -748,7 +871,10 @@ def audit_csv(csv_path: str) -> str:
 @mcp.tool()
 def analyze_deck(deck_list: str) -> str:
     """
-    Analyze a raw deck list and return curve, composition, and legality stats.
+    Analyze a raw deck list (a list of card names, not a collection CSV) and
+    return its ink curve, composition, and Core Constructed legality — the
+    tool for "is this decklist actually good/legal", independent of what you
+    own or can afford.
 
     Accepts one card per line, e.g. "4x Goofy - Musketeer" or "4 Goofy - Musketeer"
     (both "4x" and "4 " are accepted; qty is optional and defaults to 1).
@@ -758,6 +884,24 @@ def analyze_deck(deck_list: str) -> str:
     color split, card type split, an estimated lore-per-turn (sum of Character lore
     values), a Core Constructed legality check (60-card minimum, max 4 copies of any
     card, at most 2 ink colors), and any card names that couldn't be resolved.
+
+    Behavior: card names are matched the same simple way as `lookup_card`
+    (exact, then substring) — not fuzzy-resolved like `resolve_card` — so a
+    typo'd or oddly-abbreviated name lands in the unresolved list rather than
+    being guessed. Unresolved lines are excluded from every stat (curve,
+    color split, lore/turn, legality counts), so a deck list with several
+    unresolved names will under-report its true totals; always check that
+    list before trusting the numbers. The legality check is Core Constructed
+    only — it does not check rotation-group safety (whether the deck's cards
+    survive the *next* rotation) or Infinity/Poorcana rules; for rotation
+    safety, cross-reference the card list against `search_cards` filtered by
+    set, or build fresh via `build_deck(rotation_safe=True)`.
+
+    Usage guidelines: use this on a decklist you already have — hand-written,
+    pasted from elsewhere, or `build_deck`'s output — to sanity-check curve
+    and legality before playtesting or buying anything. It never touches your
+    collection, so it can't tell you what's missing or what it costs; for
+    that, feed the same deck list to `what_am_i_missing` instead.
 
     Args:
         deck_list: Raw deck list text, one card per line.
@@ -812,17 +956,32 @@ def analyze_deck(deck_list: str) -> str:
 @mcp.tool()
 def what_am_i_missing(deck_list: str, collection_csv: str) -> str:
     """
-    Compare a deck list against your collection: what you own, what's missing,
-    and the estimated cost to complete it.
+    Compare a deck list against your collection: what you already own, what's
+    missing or short, and the estimated cost to complete it — the shopping-list
+    counterpart to `analyze_deck`, which checks curve/legality but never looks
+    at ownership.
 
-    Cross-references a raw deck list (same format as analyze_deck: `4x Card
-    Name` per line) against an enriched collection CSV. For every card you're
-    short on, first checks the CSV's own TCG Market Price (you already own at
-    least one printing, so it's already there — no network needed). Only cards
-    you own zero copies of fall back to a live TCGPlayer lookup via tcgcsv.com
-    (cheapest printing across all sets/rarities — gameplay is identical
-    regardless of rarity or art). That fallback fetch only happens if at least
-    one card actually needs it, and its price data is cached 24h.
+    Cross-references a raw deck list (same format as `analyze_deck`: `4x Card
+    Name` per line) against an enriched collection CSV. Card names are matched
+    the same simple exact-then-substring way as `lookup_card` (not fuzzy like
+    `resolve_card`); a name that doesn't resolve is dropped from the "Already
+    have"/"Missing" tallies and listed separately under an "unresolved" section
+    instead of being silently skipped — check that section if the totals look
+    short. For every card you're short on, price comes first from the CSV's
+    own TCG Market Price if you already own at least one printing (no network
+    needed); only cards you own zero copies of fall back to a live TCGPlayer
+    lookup via tcgcsv.com for the cheapest printing across all sets/rarities
+    (gameplay is identical regardless of rarity or art). That fallback fetch
+    only fires if at least one card actually needs it, and its price data is
+    cached 24h — the reported total is always a snapshot, not a quote.
+
+    Usage guidelines: use this once you have a specific decklist in hand
+    (hand-written, or `build_deck`'s output) and want to know what to buy or
+    borrow before playtesting it. It doesn't check Core Constructed legality
+    or curve — run `analyze_deck` on the same list for that. If instead you
+    want a deck built around what you can realistically complete rather than
+    checking a fixed list, use `build_deck(mode="ideal")`, which folds this
+    same ownership/pricing logic into deck construction itself.
 
     Args:
         deck_list: Raw deck list text, one card per line (e.g. "4x Goofy - Musketeer").
