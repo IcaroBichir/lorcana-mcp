@@ -11,6 +11,8 @@ from lorcana_mcp.deckbuilder import (
     allocate_deck,
     compute_shift_synergy,
     _shift_target_names,
+    compute_coconut_synergy,
+    ensure_coconut_associated_card,
 )
 
 
@@ -520,3 +522,124 @@ class TestAllocateDeckSynergyGuarantee:
         picks = allocate_deck(pool, targets={"1-2": 2, "3-4": 0, "5-6": 0, "7+": 0},
                                max_copies_fn=lambda c: 1, synergy_info=info)
         assert sum(q for _, q in picks) == 2
+
+
+# ── Format Coconut synergy (beta) ────────────────────────────────────────────
+
+def _coconut(name, associated_full_name, color="Amber"):
+    return {
+        "name": name,
+        "color": color,
+        "associatedCardName": associated_full_name,
+        "abilities": [{"effect": f"You can have up to 4 copies of {associated_full_name} in your deck."}],
+    }
+
+
+class TestComputeCoconutSynergy:
+    def test_associated_card_gets_the_higher_bonus(self):
+        associated = _card("Scar - Finally King", 3, "Character", ["Steel"])
+        pool = [associated]
+        bonus = compute_coconut_synergy(pool, _coconut("Scar", "Scar - Finally King", "Steel"))
+        assert bonus["Scar - Finally King"] == 4.0
+
+    def test_tag_matched_cards_get_the_lower_bonus(self):
+        ally = _card("Some Ally", 2, "Character", ["Steel"], subtypes=["Ally"])
+        non_ally = _card("Some Hero", 2, "Character", ["Steel"], subtypes=["Hero"])
+        pool = [ally, non_ally]
+        bonus = compute_coconut_synergy(pool, _coconut("Scar", "Scar - Finally King", "Steel"))
+        assert bonus.get("Some Ally") == 2.0
+        assert "Some Hero" not in bonus
+
+    def test_associated_card_bonus_wins_over_tag_bonus_for_same_card(self):
+        # Scar's own associated card happens to also be an Ally — associated
+        # (4.0) must win, not get overwritten by the lower tag bonus (2.0).
+        associated = _card("Scar - Finally King", 3, "Character", ["Steel"], subtypes=["Ally"])
+        bonus = compute_coconut_synergy([associated], _coconut("Scar", "Scar - Finally King", "Steel"))
+        assert bonus["Scar - Finally King"] == 4.0
+
+    def test_unknown_coconut_name_still_bonuses_associated_card_only(self):
+        associated = _card("Made Up - Character", 2, "Character", ["Amber"])
+        other = _card("Unrelated Card", 2, "Character", ["Amber"])
+        bonus = compute_coconut_synergy(
+            [associated, other], _coconut("Not A Real Coconut", "Made Up - Character"),
+        )
+        assert bonus == {"Made Up - Character": 4.0}
+
+    def test_no_matches_returns_empty(self):
+        card = _card("Nothing Special", 2, "Character", ["Amber"])
+        bonus = compute_coconut_synergy([card], _coconut("Scar", "Scar - Finally King", "Steel"))
+        assert bonus == {}
+
+
+class TestEnsureCoconutAssociatedCard:
+    def test_noop_when_already_present(self):
+        associated = _card("Scar - Finally King", 3, "Character", ["Steel"])
+        picks = [(associated, 2)]
+        result = ensure_coconut_associated_card(
+            picks, [associated], "Scar - Finally King", max_copies_fn=lambda c: 4,
+        )
+        assert result == picks
+
+    def test_forces_in_missing_card_trimming_weakest_picks(self):
+        associated = _card("Scar - Finally King", 6, "Character", ["Steel"], strength=1, willpower=1, lore=1)
+        weak_fillers = [
+            _card(f"Weak Filler {i}", 1, "Character", ["Steel"], strength=0, willpower=1, lore=0)
+            for i in range(4)
+        ]
+        strong = _card("Strong Filler", 1, "Character", ["Steel"], strength=3, willpower=3, lore=2)
+        pool = [associated, strong, *weak_fillers]
+        # associated missing; 4 weak singles + 1 strong single = total 5
+        picks = [(strong, 1)] + [(w, 1) for w in weak_fillers]
+
+        result = ensure_coconut_associated_card(
+            picks, pool, "Scar - Finally King", max_copies_fn=lambda c: 4,
+        )
+        result_map = {c["fullName"]: q for c, q in result}
+
+        assert result_map["Scar - Finally King"] == 4
+        assert not any(f"Weak Filler {i}" in result_map for i in range(4))  # trimmed to make room
+        assert result_map["Strong Filler"] == 1  # kept — it scored higher
+        assert sum(result_map.values()) == 5  # total held constant
+
+    def test_trim_is_capped_by_available_picks(self):
+        # Only 2 total copies exist across current picks, so at most 2 can be
+        # freed up even though max_copies_fn allows 4 — the function never
+        # invents extra deck slots, it only reshuffles existing ones.
+        associated = _card("Scar - Finally King", 6, "Character", ["Steel"], strength=1, willpower=1, lore=1)
+        weak = _card("Weak Filler", 1, "Character", ["Steel"], strength=0, willpower=1, lore=0)
+        strong = _card("Strong Filler", 1, "Character", ["Steel"], strength=3, willpower=3, lore=2)
+        pool = [associated, weak, strong]
+        picks = [(weak, 1), (strong, 1)]
+
+        result = ensure_coconut_associated_card(
+            picks, pool, "Scar - Finally King", max_copies_fn=lambda c: 4,
+        )
+        result_map = {c["fullName"]: q for c, q in result}
+
+        assert result_map["Scar - Finally King"] == 2
+        assert sum(result_map.values()) == 2  # total held constant
+
+    def test_noop_when_not_in_legal_pool(self):
+        weak = _card("Weak Filler", 1, "Character", ["Steel"])
+        picks = [(weak, 1)]
+        result = ensure_coconut_associated_card(
+            picks, [weak], "Scar - Finally King", max_copies_fn=lambda c: 4,
+        )
+        assert result == picks
+
+    def test_noop_when_max_copies_is_zero(self):
+        # e.g. mode="collection" and zero copies of the associated card owned.
+        associated = _card("Scar - Finally King", 3, "Character", ["Steel"])
+        weak = _card("Weak Filler", 1, "Character", ["Steel"])
+        pool = [associated, weak]
+        picks = [(weak, 1)]
+        result = ensure_coconut_associated_card(
+            picks, pool, "Scar - Finally King", max_copies_fn=lambda c: 0,
+        )
+        assert result == picks
+
+    def test_noop_with_empty_associated_name(self):
+        weak = _card("Weak Filler", 1, "Character", ["Steel"])
+        picks = [(weak, 1)]
+        result = ensure_coconut_associated_card(picks, [weak], "", max_copies_fn=lambda c: 4)
+        assert result == picks

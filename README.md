@@ -65,7 +65,7 @@ Ten tools are available in Claude once the server is running:
 | `audit_csv`           | Compares an enriched collection against live API data and reports any stale or wrong fields. |
 | `analyze_deck`        | Analyzes a raw deck list (`4x Card Name` per line) for ink curve, inkable split, color split, card types, estimated lore/turn, and Core Constructed legality (60-card min, max 4 copies, ≤2 ink colors). |
 | `what_am_i_missing`   | Compares a deck list against your collection: what you already own, what's missing or short, and a live TCGPlayer cost estimate (via tcgcsv.com) to complete it. |
-| `build_deck`          | Automatically assembles a legal, curve-balanced ~60-card decklist for an ink pair/format, in one of 3 modes: `collection` (only cards you own), `ideal` (best deck regardless of ownership, priced to complete if you pass a collection CSV), or `market` (best deck, fully priced, ignoring ownership). A heuristic curve/keyword-value builder, not a synergy/combo detector. |
+| `build_deck`          | Automatically assembles a legal, curve-balanced ~60-card decklist for an ink pair/format, in one of 3 modes: `collection` (only cards you own), `ideal` (best deck regardless of ownership, priced to complete if you pass a collection CSV), or `market` (best deck, fully priced, ignoring ownership). Also builds for `format="coconut"` — Ravensburger's multiplayer singleton beta (up to 3 ink colors, 1 copy of everything except your chosen Coconut's associated character at up to 4). A heuristic curve/keyword-value builder, not a synergy/combo detector. |
 
 ---
 
@@ -316,7 +316,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-278 tests, no network calls required. CI runs the full suite on Python 3.11, 3.12, and 3.13 on every pull request and on push to `main` (see [`.github/workflows/tests.yml`](.github/workflows/tests.yml)).
+310 tests, no network calls required. CI runs the full suite on Python 3.11, 3.12, and 3.13 on every pull request and on push to `main` (see [`.github/workflows/tests.yml`](.github/workflows/tests.yml)).
 
 ---
 
@@ -364,7 +364,7 @@ If you're an AI agent (Claude or otherwise) with this MCP server connected, read
 
 ### If you're modifying this codebase
 
-- Run `pytest` before and after any change — 205 tests, all network-free (external calls are mocked).
+- Run `pytest` before and after any change — 310 tests, all network-free (external calls are mocked).
 - Code layout: pure/testable logic lives in `api.py` (card data + fuzzy matching + pricing), `deck.py` (deck list parsing/analysis), and `enricher.py` (CSV pipeline). `server.py` only wraps those as MCP tools and formats output — keep it that way rather than putting logic directly in tool functions.
 - A release touches four files together: `pyproject.toml` (version), `server.json` (version, for the MCP Registry), `CHANGELOG.md` (entry), and this README if tool behavior changed. Check `git log` for the pattern.
 - Publishing is a separate, explicit step (`python -m build`, `twine upload`, `mcp-publisher publish`) — never assume a version bump in `pyproject.toml` means it's live on PyPI or the registry. Check before telling a user a feature is "available."

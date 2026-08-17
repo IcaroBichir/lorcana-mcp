@@ -14,6 +14,11 @@ filler on raw score alone (see `compute_shift_synergy`). Floodborn/Madrigal/
 Puppy/Red Panda Shift (subtype-targeted, not name-targeted) and Universal
 Shift (no target) are out of scope for this — see `_shift_target_names`.
 
+The other piece of scoped synergy awareness is Format Coconut (see
+`compute_coconut_synergy`): a hand-curated per-Coconut tag table, since with
+only 18 beta cards there's no general pattern to derive this from the way
+Shift-family keywords share one.
+
 See `build_deck` in server.py for the tool that wires this up and surfaces
 these caveats to the user.
 """
@@ -324,6 +329,97 @@ def compute_shift_synergy(pool: list[dict]) -> tuple[dict[str, float], list[dict
     return bonus, synergy_info
 
 
+# ── Format Coconut synergy (beta, see api.fetch_format_coconut_cards) ──────────
+
+# One hand-curated synergy hint per Coconut card, keyed by the Coconut's own
+# `name` field (lowercased) — mirrors this project's CLAUDE.md "Format
+# Coconut" section, which documents the same 18 cards with the same intent.
+# Only 18 cards exist, each with a genuinely different payoff shape (subtype
+# tribal, keyword-matters, cost-band, named-character chain, ...), so unlike
+# Shift-family synergy above this isn't derivable from the card data itself
+# — it has to be told what each Coconut's ability actually rewards. A tag is
+# (kind, value); a card matching ANY of a Coconut's tags gets the bonus.
+_COCONUT_SYNERGY_TAGS: dict[str, list[tuple[str, str]]] = {
+    "scar":            [("subtype", "Ally")],
+    "ariel":           [("subtype", "Princess"), ("type", "Song")],
+    "winnie the pooh": [("no_ability", "")],
+    "stitch":          [("cost_le", "2")],
+    "ursula":          [("type", "Song")],
+    "mickey mouse":    [("name_contains", "mickey mouse")],
+    "mufasa":          [("cost_ge", "6")],
+    "nick wilde":      [("type", "Item")],
+    "snow white":      [("subtype", "Seven Dwarfs"), ("name_contains", "snow white")],
+    "donald duck":     [("keyword", "Boost")],
+    "mr. incredible":  [("subtype", "Super")],
+    "moana":           [("name_contains", "moana"), ("name_contains", "heihei"), ("name_contains", "pua")],
+    "john silver":     [("type", "Location")],
+    "robin hood":      [("name_contains", "robin hood"), ("text_contains", "deal")],
+    "tinker bell":     [("text_contains", "deal")],
+    "sisu":            [("keyword", "Ward"), ("keyword", "Resist")],
+    "pocahontas":      [("text_contains", "lore")],
+    "dumbo":           [("text_contains", "⟳"), ("text_contains", "exert")],
+}
+
+# Same tier as the Shift synergy bonus above — meaningful nudge, not a
+# guaranteed inclusion on its own.
+_COCONUT_SYNERGY_BONUS = 2.0
+
+# Higher than the archetype-tag bonus: the Coconut's own associated
+# character (the one card allowed up to 4 copies instead of 1) should
+# clearly outrank ordinary same-tag filler, the same way a Shift payoff
+# outranks unrelated cards once its enabler is confirmed satisfiable.
+_COCONUT_ASSOCIATED_BONUS = 4.0
+
+
+def _matches_coconut_tag(card: dict, kind: str, value: str) -> bool:
+    if kind == "subtype":
+        return value.lower() in [s.lower() for s in (card.get("subtypes") or [])]
+    if kind == "keyword":
+        return value.lower() in [k.lower() for k in _keywords_of(card)]
+    if kind == "type":
+        return is_song(card) if value == "Song" else card.get("type") == value
+    if kind == "name_contains":
+        return value.lower() in (card.get("name") or "").lower()
+    if kind == "text_contains":
+        return value.lower() in (card.get("fullText") or "").lower()
+    if kind == "no_ability":
+        return not card.get("abilities")
+    if kind == "cost_le":
+        cost = card.get("cost")
+        return isinstance(cost, int) and cost <= int(value)
+    if kind == "cost_ge":
+        cost = card.get("cost")
+        return isinstance(cost, int) and cost >= int(value)
+    return False
+
+
+def compute_coconut_synergy(pool: list[dict], coconut: dict) -> dict[str, float]:
+    """Score a flat bonus (by fullName) for every pool card relevant to the
+    chosen Coconut: its own associated character (see
+    `_COCONUT_ASSOCIATED_BONUS` — the one card the format lets a deck run up
+    to 4 copies of) always wins the higher bonus so it isn't crowded out by
+    same-tag filler the way it otherwise could be on raw stats alone, and
+    every other pool card matching one of the Coconut's synergy tags (see
+    `_COCONUT_SYNERGY_TAGS`) gets the lower one. A Coconut name missing from
+    the hand-curated tag table still gets its associated-character bonus —
+    only the tag-based half is skipped — so callers still get a sensibly
+    headlined, if untargeted, build.
+    """
+    coconut_name = (coconut.get("name") or "").strip().lower()
+    associated_full_name = coconut.get("associatedCardName", "")
+    tags = _COCONUT_SYNERGY_TAGS.get(coconut_name, [])
+    bonus: dict[str, float] = {}
+    for card in pool:
+        fn = card.get("fullName", "")
+        if not fn:
+            continue
+        if fn == associated_full_name:
+            bonus[fn] = _COCONUT_ASSOCIATED_BONUS
+        elif tags and any(_matches_coconut_tag(card, kind, value) for kind, value in tags):
+            bonus[fn] = _COCONUT_SYNERGY_BONUS
+    return bonus
+
+
 # ── Curve targets + allocation ───────────────────────────────────────────────
 
 # Midpoints of the project CLAUDE.md's ink-curve guideline ranges
@@ -527,6 +623,73 @@ def _enforce_all_relation_synergies(
             picks_map[cand_fn] = [candidate, 1]
             order.append(cand_fn)
             have_names.add(req)
+
+    return [(picks_map[fn][0], picks_map[fn][1]) for fn in order if picks_map[fn][1] > 0]
+
+
+def ensure_coconut_associated_card(
+    picks: list[tuple[dict, int]],
+    pool: list[dict],
+    associated_full_name: str,
+    max_copies_fn: Callable[[dict], int],
+) -> list[tuple[dict, int]]:
+    """Guarantee the Coconut's associated character lands in the final build
+    with as many copies as `max_copies_fn` allows (normally 4).
+
+    A scoring bonus alone (see `compute_coconut_synergy`'s
+    `_COCONUT_ASSOCIATED_BONUS`) isn't reliably enough: an expensive
+    associated character competes in `allocate_deck`'s backfill pass on raw
+    global score, which structurally favors cheap, efficient cards — the
+    same gap `_enforce_all_relation_synergies` closes for Duo Shift above.
+    This mirrors that approach: if the associated card is missing, trim
+    copies from the current globally-weakest pick(s) to make room rather
+    than pushing the deck past its target size. No-ops if the card is
+    already present, isn't in the legal pool at all (e.g. its ink isn't
+    part of this build), or `max_copies_fn` caps it at 0 (e.g.
+    mode="collection" and zero copies owned).
+    """
+    if not associated_full_name:
+        return picks
+
+    picks_map: dict[str, list] = {}
+    order: list[str] = []
+    for card, qty in picks:
+        fn = card.get("fullName", "")
+        if fn not in picks_map:
+            order.append(fn)
+        picks_map[fn] = [card, qty]
+
+    if associated_full_name in picks_map:
+        return picks
+
+    candidate = next((c for c in pool if c.get("fullName") == associated_full_name), None)
+    if candidate is None:
+        return picks
+
+    want = max(0, max_copies_fn(candidate))
+    if want <= 0:
+        return picks
+
+    remaining = want
+    while remaining > 0:
+        weakest_fn = min(
+            (fn for fn in order if picks_map[fn][1] > 0),
+            key=lambda fn: score_card(picks_map[fn][0]),
+            default=None,
+        )
+        if weakest_fn is None:
+            break
+        trim = min(remaining, picks_map[weakest_fn][1])
+        picks_map[weakest_fn][1] -= trim
+        if picks_map[weakest_fn][1] <= 0:
+            order.remove(weakest_fn)
+            del picks_map[weakest_fn]
+        remaining -= trim
+
+    added_qty = want - remaining
+    if added_qty > 0:
+        picks_map[associated_full_name] = [candidate, added_qty]
+        order.append(associated_full_name)
 
     return [(picks_map[fn][0], picks_map[fn][1]) for fn in order if picks_map[fn][1] > 0]
 

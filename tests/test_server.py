@@ -617,3 +617,136 @@ class TestBuildDeckDualInkRegression:
              patch("lorcana_mcp.server.fetch_duels_ink", return_value=duels + [dual_duels]):
             result = build_deck("Amber", mode="ideal", format="core")
         assert "Ruby Emerald Dual" not in result
+
+
+# ── build_deck: Format Coconut (beta) ────────────────────────────────────────
+
+def _coconut_card(name, subtitle, color, associated_card_name, effect="Some passive effect."):
+    return {
+        "name": name,
+        "subtitle": f'"{subtitle}"',
+        "fullName": f'{name} - "{subtitle}"',
+        "color": color,
+        "associatedCardName": associated_card_name,
+        "abilities": [
+            {"effect": f"You can have up to 4 copies of {associated_card_name} in your deck."},
+            {"effect": effect},
+        ],
+    }
+
+
+_COCONUT_POOL = [
+    _coconut_card("Scar", "Finally King", "Steel", "Steel Character 1-0"),
+    _coconut_card("Ariel", "Spectacular Singer", "Amber", "Amber Character 1-0"),
+]
+
+
+class TestBuildDeckCoconutValidation:
+    def test_no_ink_colors_no_coconut_card_lists_everything(self):
+        from lorcana_mcp.server import build_deck
+        with patch("lorcana_mcp.server.fetch_format_coconut_cards", return_value=_COCONUT_POOL):
+            result = build_deck(format="coconut")
+        assert "Scar - Finally King" in result
+        assert "Ariel - Spectacular Singer" in result
+        assert "coconut_card" in result
+
+    def test_ink_colors_with_no_coconut_card_filters_the_menu(self):
+        from lorcana_mcp.server import build_deck
+        with patch("lorcana_mcp.server.fetch_format_coconut_cards", return_value=_COCONUT_POOL):
+            result = build_deck("Amber", format="coconut")
+        assert "Ariel - Spectacular Singer" in result
+        assert "Scar - Finally King" not in result  # Steel, filtered out
+        assert "coconut_card" in result
+
+    def test_menu_includes_short_ability_and_focus_hint(self):
+        from lorcana_mcp.server import build_deck
+        with patch("lorcana_mcp.server.fetch_format_coconut_cards", return_value=_COCONUT_POOL):
+            result = build_deck("Amber", format="coconut")
+        assert "Some passive effect." in result  # the short ability text
+        assert "Focus:" in result  # the decision-aiding highlight
+
+    def test_unknown_ink_color_in_listing_mode_still_errors(self):
+        from lorcana_mcp.server import build_deck
+        result = build_deck("NotAColor", format="coconut")
+        assert "Unknown ink color" in result
+
+    def test_unresolvable_coconut_card_name(self):
+        from lorcana_mcp.server import build_deck
+        with patch("lorcana_mcp.server.fetch_format_coconut_cards", return_value=_COCONUT_POOL):
+            result = build_deck("Amber", format="coconut", coconut_card="totally not a coconut")
+        assert "Could not match" in result
+
+    def test_ink_colors_must_include_coconuts_own_ink(self):
+        from lorcana_mcp.server import build_deck
+        with patch("lorcana_mcp.server.fetch_format_coconut_cards", return_value=_COCONUT_POOL):
+            result = build_deck("Ruby,Emerald", format="coconut", coconut_card="Scar")
+        assert "must include Steel" in result
+
+    def test_up_to_3_colors_allowed(self):
+        from lorcana_mcp.server import build_deck
+        cards, _ = _bd_abundant_pool(set_code="9")
+        with patch("lorcana_mcp.server.fetch_format_coconut_cards", return_value=_COCONUT_POOL), \
+             patch("lorcana_mcp.server.fetch_lorcana_json", return_value=cards):
+            result = build_deck("Steel,Amber,Ruby", format="coconut", coconut_card="Scar")
+        assert "allows at most" not in result
+
+    def test_4_colors_rejected(self):
+        from lorcana_mcp.server import build_deck
+        with patch("lorcana_mcp.server.fetch_format_coconut_cards", return_value=_COCONUT_POOL):
+            result = build_deck("Steel,Amber,Ruby,Sapphire", format="coconut", coconut_card="Scar")
+        assert "allows at most 3" in result
+
+    def test_fetch_failure_returns_error(self):
+        from lorcana_mcp.server import build_deck
+        with patch("lorcana_mcp.server.fetch_format_coconut_cards", side_effect=RuntimeError("boom")):
+            result = build_deck("Amber", format="coconut")
+        assert "Failed to fetch Format Coconut card data" in result
+
+
+class TestBuildDeckCoconutBuild:
+    def test_associated_card_runs_4_copies_rest_singleton(self):
+        from lorcana_mcp.server import build_deck
+        cards, _ = _bd_abundant_pool(color="Steel", set_code="9")
+        with patch("lorcana_mcp.server.fetch_format_coconut_cards", return_value=_COCONUT_POOL), \
+             patch("lorcana_mcp.server.fetch_lorcana_json", return_value=cards):
+            result = build_deck("Steel", format="coconut", coconut_card="Scar", mode="ideal")
+
+        assert "Coconut: Scar - Finally King (Steel)" in result
+        assert "Decklist (60 cards)" in result
+        assert "OK: singleton respected" in result
+        assert "4x Steel Character 1-0" in result
+        # every other listed card should be a single copy
+        for line in result.splitlines():
+            if line.startswith("| ") and "Steel Character 1-0" not in line:
+                cols = [c.strip() for c in line.strip("| ").split("|")]
+                if len(cols) == 4 and cols[3].isdigit():
+                    assert cols[3] == "1", line
+
+    def test_collection_mode_caps_associated_card_at_owned_quantity(self, csv_file):
+        from lorcana_mcp.server import build_deck
+        cards, _ = _bd_abundant_pool(color="Steel", set_code="9")
+        owned_rows = [
+            {"Product Name": "Steel Character 1-0", "Add to Quantity": "2"},
+            {"Product Name": "Steel Character 2-0", "Add to Quantity": "1"},
+        ]
+        path = csv_file(owned_rows)
+        with patch("lorcana_mcp.server.fetch_format_coconut_cards", return_value=_COCONUT_POOL), \
+             patch("lorcana_mcp.server.fetch_lorcana_json", return_value=cards):
+            result = build_deck(
+                "Steel", format="coconut", coconut_card="Scar",
+                mode="collection", collection_csv=path,
+            )
+        assert "Decklist (3 cards)" in result
+        assert "2x Steel Character 1-0" in result
+        assert "1x Steel Character 2-0" in result
+
+    def test_no_legality_restriction_keeps_old_set_cards(self):
+        from lorcana_mcp.server import build_deck
+        old_card = _bd_card("Steel Old Set Card", 3, "Character", "Steel", set_code="1", number=999)
+        cards, _ = _bd_abundant_pool(color="Steel", set_code="9")
+        with patch("lorcana_mcp.server.fetch_format_coconut_cards", return_value=_COCONUT_POOL), \
+             patch("lorcana_mcp.server.fetch_lorcana_json", return_value=cards + [old_card]), \
+             patch("lorcana_mcp.server.fetch_duels_ink") as mock_duels:
+            result = build_deck("Steel", format="coconut", coconut_card="Scar", mode="ideal")
+        mock_duels.assert_not_called()  # coconut needs no legality lookup at all
+        assert "Decklist (60 cards)" in result

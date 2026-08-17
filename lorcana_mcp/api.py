@@ -463,6 +463,55 @@ def build_lj_lookup(cards: list[dict]) -> dict:
     return lookup
 
 
+def fetch_format_coconut_cards() -> list[dict]:
+    """Fetch the 18 beta Format Coconut cards from LorcanaJSON (cached 24h).
+
+    Beta data (open beta since 2026-07-28, see the project CLAUDE.md's
+    "Format Coconut" section) — Ravensburger can add, remove, or reword
+    these at any time, and this whole endpoint could disappear if the beta
+    ends. Each entry exposes `name`, `subtitle`, `color`, `abilities` (with
+    per-ability `effect` text), and `associatedCardName` — the real,
+    already-printed character card this Coconut lets a deck run up to 4
+    copies of (every other card in a Coconut deck is capped at 1, per the
+    format's singleton rule).
+    """
+    cached = _cache.get("format_coconut_cards")
+    if cached is not None:
+        return cached
+    data = json.loads(_fetch("https://lorcanajson.org/files/current/en/formatCoconutCards.json"))
+    cards = data["cards"]
+    _cache.set("format_coconut_cards", cards)
+    return cards
+
+
+def resolve_coconut_card(query: str, coconut_cards: list[dict]) -> dict | None:
+    """Fuzzy-match a query against the 18 beta Format Coconut cards by name/subtitle.
+
+    Only 18 cards exist in the beta pool, each with a distinct first `name`,
+    so a simple token-overlap score is enough here — no need for the
+    typo-tolerant substring machinery `score_candidates` uses for the much
+    larger main card pool. Returns the best-scoring card, or None if the
+    query shares no tokens with any Coconut card's name/subtitle.
+    """
+    query_tokens = set(_tokenize(query))
+    if not query_tokens:
+        return None
+    best = None
+    best_score = 0.0
+    for c in coconut_cards:
+        card_tokens = set(_tokenize(c.get("name", ""))) | set(_tokenize(c.get("subtitle", "")))
+        if not card_tokens:
+            continue
+        overlap = query_tokens & card_tokens
+        if not overlap:
+            continue
+        score = len(overlap) / len(query_tokens | card_tokens)
+        if score > best_score:
+            best_score = score
+            best = c
+    return best
+
+
 def fetch_duels_ink() -> list[dict]:
     """Fetch all cards from duels.ink (paginated 100/page, cached 24h).
 
@@ -515,13 +564,20 @@ def lj_card_format_legal(card: dict, fmt: str, duels_lookup: dict) -> bool:
 
     Poorcana is a local convention (Common/Uncommon rarity only), checked
     straight off the LJ card's own `rarity` field — no duels.ink lookup
-    needed. Every other format cross-references duels.ink's `legality` list
-    by (setCode, number), the same check filter_collection already applies
-    per collection-CSV row, applied here directly to LJ cards (which already
-    carry setCode/number natively).
+    needed. Coconut (see fetch_format_coconut_cards) has no rotation and, per
+    its official rules, "all released sets permitted" — every card is
+    legal, so this short-circuits True with no lookup either; the format's
+    actual deck-shaping constraints (singleton, ≤3 colors, one Coconut card)
+    are enforced elsewhere (build_deck's coconut-specific max_copies_fn and
+    ink-color check), not here. Every other format cross-references
+    duels.ink's `legality` list by (setCode, number), the same check
+    filter_collection already applies per collection-CSV row, applied here
+    directly to LJ cards (which already carry setCode/number natively).
     """
     if fmt == "poorcana":
         return (card.get("rarity") or "").strip() in ("Common", "Uncommon")
+    if fmt == "coconut":
+        return True
     set_code = str(card.get("setCode", ""))
     number = card.get("number")
     if not set_code or number is None:
@@ -539,9 +595,9 @@ def filter_by_format(cards: list[dict], fmt: str, duels_lookup: dict | None = No
     """Filter LorcanaJSON cards to those legal in the given format.
 
     duels_lookup (build_duels_lookup(fetch_duels_ink())) is required for
-    core/infinity/core_zh/core_ja; unused for poorcana. Passed in rather
-    than fetched internally so a caller building several filtered views
-    (e.g. build_deck's candidate pool) only fetches duels.ink data once.
+    core/infinity/core_zh/core_ja; unused for poorcana and coconut. Passed in
+    rather than fetched internally so a caller building several filtered
+    views (e.g. build_deck's candidate pool) only fetches duels.ink data once.
     """
     return [c for c in cards if lj_card_format_legal(c, fmt, duels_lookup or {})]
 

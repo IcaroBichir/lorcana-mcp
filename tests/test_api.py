@@ -33,6 +33,8 @@ from lorcana_mcp.api import (
     fetch_lorcana_sets,
     lj_card_format_legal,
     filter_by_format,
+    fetch_format_coconut_cards,
+    resolve_coconut_card,
 )
 
 
@@ -720,6 +722,10 @@ class TestLjCardFormatLegal:
     def test_missing_set_code_or_number_is_illegal(self):
         assert lj_card_format_legal({"fullName": "No Set"}, "core", {}) is False
 
+    def test_coconut_is_always_legal_with_no_lookup_needed(self):
+        card = _fmt_card("Anything", set_code="1", number=1)
+        assert lj_card_format_legal(card, "coconut", {}) is True
+
 
 class TestFilterByFormat:
     def test_filters_to_legal_cards_only(self):
@@ -733,6 +739,11 @@ class TestFilterByFormat:
         common = _fmt_card("Common", rarity="Common")
         result = filter_by_format([common], "poorcana")
         assert result == [common]
+
+    def test_coconut_needs_no_duels_lookup_and_keeps_everything(self):
+        old_set = _fmt_card("Any Released Card", set_code="1", number=1)
+        result = filter_by_format([old_set], "coconut")
+        assert result == [old_set]
 
 
 # ── tcgcsv pricing ────────────────────────────────────────────────────────────────
@@ -852,3 +863,65 @@ class TestCheapestPriceForCard:
     def test_missing_external_links_ignored(self):
         lj_cards = [{"fullName": "Goofy - Musketeer"}]
         assert cheapest_price_for_card("Goofy - Musketeer", lj_cards, {1: 5.0}) is None
+
+
+# ── Format Coconut (beta) ────────────────────────────────────────────────────
+
+def _coconut_card(name, subtitle, color, associated_card_name, effects=None):
+    effects = effects or [f"You can have up to 4 copies of {name} - {subtitle} in your deck."]
+    return {
+        "name": name,
+        "subtitle": f'"{subtitle}"',
+        "fullName": f'{name} - "{subtitle}"',
+        "color": color,
+        "associatedCardName": associated_card_name,
+        "abilities": [{"effect": e} for e in effects],
+    }
+
+
+class TestFetchFormatCoconutCards:
+    def test_cache_hit_skips_fetch(self):
+        cached = [_coconut_card("Scar", "Finally King", "Steel", "Scar - Finally King")]
+        with patch("lorcana_mcp.api._cache.get", return_value=cached), \
+             patch("lorcana_mcp.api._fetch") as mock_fetch:
+            cards = fetch_format_coconut_cards()
+        assert cards == cached
+        mock_fetch.assert_not_called()
+
+    def test_cache_miss_fetches_and_caches(self):
+        body = json.dumps({
+            "metadata": {"formatVersion": "2.3.5"},
+            "cards": [_coconut_card("Scar", "Finally King", "Steel", "Scar - Finally King")],
+        }).encode()
+        with patch("lorcana_mcp.api._cache.get", return_value=None), \
+             patch("lorcana_mcp.api._fetch", return_value=body), \
+             patch("lorcana_mcp.api._cache.set") as mock_set:
+            cards = fetch_format_coconut_cards()
+        assert cards[0]["name"] == "Scar"
+        mock_set.assert_called_once_with("format_coconut_cards", cards)
+
+
+class TestResolveCoconutCard:
+    _POOL = [
+        _coconut_card("Ariel", "Spectacular Singer", "Amber", "Ariel - Spectacular Singer"),
+        _coconut_card("Mickey Mouse", "Brave Little Tailor", "Ruby", "Mickey Mouse - Brave Little Tailor"),
+        _coconut_card("Snow White", "Merry as the Morning", "Amethyst", "Snow White - Merry as the Morning"),
+    ]
+
+    def test_matches_by_bare_first_name(self):
+        result = resolve_coconut_card("ariel", self._POOL)
+        assert result["name"] == "Ariel"
+
+    def test_matches_by_full_name_and_subtitle(self):
+        result = resolve_coconut_card("Mickey Mouse Brave Little Tailor", self._POOL)
+        assert result["name"] == "Mickey Mouse"
+
+    def test_matches_multi_word_name(self):
+        result = resolve_coconut_card("snow white", self._POOL)
+        assert result["name"] == "Snow White"
+
+    def test_no_overlap_returns_none(self):
+        assert resolve_coconut_card("completely unrelated query", self._POOL) is None
+
+    def test_empty_query_returns_none(self):
+        assert resolve_coconut_card("", self._POOL) is None

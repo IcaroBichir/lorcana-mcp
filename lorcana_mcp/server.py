@@ -12,12 +12,13 @@ from .api import (
     _card_colors, resolve_card as _resolve_card,
     singer_value, is_song, find_song_singers,
     fetch_tcgcsv_prices, cheapest_price_for_card,
+    fetch_format_coconut_cards, resolve_coconut_card,
 )
 from .enricher import enrich_csv as _enrich_csv, audit_csv as _audit_csv, _num_int
 from .deck import analyze_deck as _analyze_deck, what_am_i_missing as _what_am_i_missing
 from .deckbuilder import (
     build_candidate_pool, allocate_deck, rotation_safe_set_codes, summarize_picks,
-    compute_shift_synergy,
+    compute_shift_synergy, compute_coconut_synergy, ensure_coconut_associated_card,
 )
 
 mcp = FastMCP(
@@ -1047,23 +1048,93 @@ def what_am_i_missing(deck_list: str, collection_csv: str) -> str:
 
 _BUILD_DECK_DISCLAIMER = (
     "_This is a heuristic curve/keyword-value deck builder — it optimizes ink curve, "
-    "stat efficiency, and keyword value. It has one scoped piece of synergy awareness "
-    "(named Shift/Duo Shift/Combo Shift/Potato Shift payoffs get boosted alongside their "
-    "matching enablers — see \"Shift synergies built together\" above, if any landed), but "
-    "it still does not detect general multi-card combos or synergy packages (e.g. the "
-    "Merlin/Mim Bounce Loop, the Steelsong package, subtype-targeted Shift like Floodborn/"
-    "Madrigal/Puppy/Red Panda Shift — see CLAUDE.md's \"Key combos and synergies\"). Review "
-    "the decklist before playing; swap in known synergy pieces manually._"
+    "stat efficiency, and keyword value. It has scoped synergy awareness for named "
+    "Shift/Duo Shift/Combo Shift/Potato Shift payoffs (boosted alongside their matching "
+    "enablers — see \"Shift synergies built together\" above, if any landed) and, for "
+    "format=\"coconut\", a hand-curated tag per Coconut card (see CLAUDE.md's \"Format "
+    "Coconut\" section), but it still does not detect general multi-card combos or synergy "
+    "packages (e.g. the Merlin/Mim Bounce Loop, the Steelsong package, subtype-targeted "
+    "Shift like Floodborn/Madrigal/Puppy/Red Panda Shift — see CLAUDE.md's \"Key combos and "
+    "synergies\"). Review the decklist before playing; swap in known synergy pieces manually._"
 )
+
+
+# Short, hand-written archetype hint per Coconut (keyed by the Coconut's own
+# `name` field, lowercased) — presentation only, purely to help a caller
+# pick between the 18 options in _coconut_card_menu. Deliberately separate
+# from deckbuilder._COCONUT_SYNERGY_TAGS (which drives scoring, not prose):
+# auto-generating readable phrasing from those mechanical tags produced
+# awkward repeated wording for cards with several tags (e.g. Moana's three
+# name_contains tags), so this is hand-tuned instead — same judgment calls
+# already written up in the project CLAUDE.md's "Format Coconut" section.
+_COCONUT_FOCUS: dict[str, str] = {
+    "scar":            "Ally cost reduction",
+    "ariel":           "Princess + Song lore burst",
+    "winnie the pooh": "vanilla stat-stick value, beginner-friendly",
+    "stitch":          "cheap-character swarm/flood",
+    "ursula":          "Sing Together / big songs",
+    "mickey mouse":    "Mickey Mouse Shift chain",
+    "mufasa":          "heavy inkwell ramp into big finishers",
+    "nick wilde":      "items-matter, 4-item lore burst",
+    "snow white":      "Snow White + Seven Dwarfs combo",
+    "donald duck":     "Boost payoff",
+    "mr. incredible":  "Super challenge/removal",
+    "moana":           "Moana/Heihei/Pua ramp",
+    "john silver":     "Location tank",
+    "robin hood":      "Robin Hood damage chain",
+    "tinker bell":     "damage amplifier",
+    "sisu":            "combat-stat questing (pairs with Ward/Resist)",
+    "pocahontas":      "lore/challenge control",
+    "dumbo":           "turn-1 activated (⟳) abilities",
+}
+
+
+def _coconut_card_menu(coconut_cards: list[dict], filter_colors: set[str] | None = None) -> str:
+    """Markdown listing of the beta Format Coconut cards, grouped by ink,
+    for build_deck(format="coconut") calls made with no coconut_card.
+
+    filter_colors (e.g. {"Amber"}), if given, restricts the listing to only
+    those ink(s) instead of showing all 18 — used when the caller passed
+    ink_colors without a coconut_card yet.
+    """
+    scope = ""
+    if filter_colors:
+        coconut_cards = [c for c in coconut_cards if c.get("color") in filter_colors]
+        scope = f"{'/'.join(sorted(filter_colors))} "
+    lines = [
+        f'**Format Coconut** needs a `coconut_card` — pick one of the {len(coconut_cards)} '
+        f'{scope}beta card(s) below, then call build_deck again with format="coconut" '
+        'and coconut_card="<name>".\n',
+    ]
+    by_color: dict[str, list[dict]] = {}
+    for c in coconut_cards:
+        by_color.setdefault(c.get("color", "—"), []).append(c)
+    for color in sorted(by_color):
+        lines.append(f"**{color}**")
+        for c in sorted(by_color[color], key=lambda c: c.get("name", "")):
+            subtitle = (c.get("subtitle") or "").strip('"')
+            effect = next(
+                (ab.get("effect", "") for ab in c.get("abilities", [])
+                 if "up to 4 copies" not in ab.get("effect", "")),
+                "",
+            )
+            focus = _COCONUT_FOCUS.get((c.get("name") or "").strip().lower(), "")
+            focus_suffix = f" _(Focus: {focus})_" if focus else ""
+            lines.append(f"- **{c.get('name')} - {subtitle}** — {effect}{focus_suffix}")
+        lines.append("")
+    if not coconut_cards:
+        lines.append("_No Coconut cards found for that ink — this shouldn't happen; try again with no ink filter._")
+    return "\n".join(lines)
 
 
 @mcp.tool()
 def build_deck(
-    ink_colors: str,
+    ink_colors: str = "",
     mode: str = "ideal",
     format: str = "core",
     collection_csv: str = "",
     rotation_safe: bool = False,
+    coconut_card: str = "",
 ) -> str:
     """
     Automatically assemble a legal, curve-balanced ~60-card decklist for an
@@ -1082,23 +1153,43 @@ def build_deck(
     curve, stat efficiency, and keyword value, not multi-card combos or
     synergy packages. See the disclaimer at the bottom of every result.
 
+    format="coconut" builds for Format Coconut (Ravensburger's multiplayer
+    singleton beta, open since 2026-07-28 — rules/card pool may still
+    change; see the project CLAUDE.md's "Format Coconut" section). It needs
+    coconut_card, allows up to 3 ink colors (one must match the Coconut's
+    own ink), has no rotation and no tracked banned list (every released
+    card is treated as legal), and every card in the build is capped at 1
+    copy except the Coconut's associated real character, which may run up
+    to 4 — this replaces the usual max-4-of-anything rule entirely. Call
+    with format="coconut" and no coconut_card to get the full list of the
+    18 beta Coconuts to choose from.
+
     Args:
         ink_colors: Comma-separated ink color(s), e.g. "Amber,Sapphire".
-                    1-2 colors for core/core_zh/core_ja/poorcana, 1-6 for infinity.
+                    1-2 colors for core/core_zh/core_ja/poorcana, 1-6 for
+                    infinity, 1-3 for coconut (must include the Coconut
+                    card's own ink — see coconut_card). May be omitted
+                    entirely when format="coconut" and coconut_card is also
+                    omitted — that combination just lists the 18 beta
+                    Coconut cards (filtered to the given ink(s), if any) and
+                    doesn't build anything yet.
         mode: "collection", "ideal", or "market".
-        format: "core", "infinity", "core_zh", "core_ja", or "poorcana".
+        format: "core", "infinity", "core_zh", "core_ja", "poorcana", or "coconut".
         collection_csv: Absolute path to an enriched collection CSV. Required
                         for mode="collection"; optional for "ideal"; ignored for "market".
         rotation_safe: If True and format="core", restrict to the rotation
                        group that will still be legal after the next
                        rotation event. No-op (with a note) for other formats.
+        coconut_card: Required when format="coconut" — fuzzy name of one of
+                      the 18 beta Coconut cards (e.g. "Ariel", "Mickey
+                      Mouse", "snow white"). Ignored for every other format.
     """
     valid_inks = {
         "amber": "Amber", "amethyst": "Amethyst", "emerald": "Emerald",
         "ruby": "Ruby", "sapphire": "Sapphire", "steel": "Steel",
     }
     valid_modes = {"collection", "ideal", "market"}
-    valid_formats = {"core", "infinity", "core_zh", "core_ja", "poorcana"}
+    valid_formats = {"core", "infinity", "core_zh", "core_ja", "poorcana", "coconut"}
 
     mode = mode.lower().strip()
     fmt = format.lower().strip()
@@ -1109,13 +1200,28 @@ def build_deck(
         return f'Unknown format "{format}". Valid options: {", ".join(sorted(valid_formats))}.'
 
     raw_colors = [c.strip().lower() for c in ink_colors.split(",") if c.strip()]
+    unknown = [c for c in raw_colors if c not in valid_inks]
+
+    if fmt == "coconut" and not coconut_card:
+        # Listing mode: ink_colors is optional here (unlike every other
+        # path below) — show the full 18-card menu, or just the cards for
+        # the given ink(s) if any were passed, so the caller can pick one
+        # before calling again with coconut_card to actually build.
+        if unknown:
+            return f'Unknown ink color(s): {", ".join(unknown)}. Valid: {", ".join(sorted(valid_inks.values()))}.'
+        try:
+            coconut_pool = fetch_format_coconut_cards()
+        except Exception as e:
+            return f"Failed to fetch Format Coconut card data: {e}"
+        filter_colors = {valid_inks[c] for c in raw_colors} if raw_colors else None
+        return _coconut_card_menu(coconut_pool, filter_colors)
+
     if not raw_colors:
         return 'Provide at least one ink color, e.g. "Amber,Sapphire".'
-    unknown = [c for c in raw_colors if c not in valid_inks]
     if unknown:
         return f'Unknown ink color(s): {", ".join(unknown)}. Valid: {", ".join(sorted(valid_inks.values()))}.'
 
-    max_colors = 6 if fmt == "infinity" else 2
+    max_colors = 6 if fmt == "infinity" else (3 if fmt == "coconut" else 2)
     if len(raw_colors) > max_colors:
         return (
             f'{DUELS_FORMAT_LABELS.get(fmt, fmt)} allows at most {max_colors} '
@@ -1124,7 +1230,31 @@ def build_deck(
 
     colors = [valid_inks[c] for c in raw_colors]
     colors_display = "/".join(colors)
-    fmt_label = DUELS_FORMAT_LABELS.get(fmt, fmt.capitalize() if fmt == "poorcana" else fmt)
+    fmt_label = DUELS_FORMAT_LABELS.get(fmt, fmt.capitalize() if fmt in ("poorcana", "coconut") else fmt)
+
+    coconut: dict | None = None
+    coconut_associated_name = ""
+    if fmt == "coconut":
+        # coconut_card is guaranteed non-empty here — the no-coconut_card
+        # case already returned the card menu above.
+        try:
+            coconut_pool = fetch_format_coconut_cards()
+        except Exception as e:
+            return f"Failed to fetch Format Coconut card data: {e}"
+        coconut = resolve_coconut_card(coconut_card, coconut_pool)
+        if coconut is None:
+            return (
+                f'Could not match "{coconut_card}" to one of the 18 beta Format Coconut '
+                'cards. Call build_deck(format="coconut") with no coconut_card to see the full list.'
+            )
+        coconut_color = coconut.get("color", "")
+        if coconut_color.lower() not in raw_colors:
+            subtitle = (coconut.get("subtitle") or "").strip('"')
+            return (
+                f'"{coconut.get("name")} - {subtitle}" is {coconut_color} — ink_colors must '
+                f'include {coconut_color} (one of your chosen colors has to match the Coconut\'s ink).'
+            )
+        coconut_associated_name = coconut.get("associatedCardName", "")
 
     if mode == "collection" and not collection_csv:
         return 'mode="collection" requires collection_csv (absolute path to your enriched collection CSV).'
@@ -1143,7 +1273,7 @@ def build_deck(
         return f"Failed to fetch card data: {e}"
 
     duels_lookup = None
-    if fmt != "poorcana":
+    if fmt not in ("poorcana", "coconut"):
         try:
             duels_lookup = build_duels_lookup(fetch_duels_ink())
         except Exception as e:
@@ -1173,15 +1303,26 @@ def build_deck(
         owned_note = " from your collection" if mode == "collection" else ""
         return f"No {colors_display} cards are legal in {fmt_label}{owned_note}."
 
-    def _collection_max_copies(card: dict) -> int:
-        return min(4, owned_counts.get((card.get("fullName") or "").lower(), 0))
+    def _max_copies(card: dict) -> int:
+        # Coconut is singleton except the Coconut's own associated character,
+        # which may run up to 4 — this replaces the normal "always up to 4"
+        # rule entirely rather than adding to it.
+        cap = 1 if (fmt == "coconut" and card.get("fullName") != coconut_associated_name) else 4
+        if mode == "collection":
+            cap = min(cap, owned_counts.get((card.get("fullName") or "").lower(), 0))
+        return cap
 
-    max_copies_fn = _collection_max_copies if mode == "collection" else None
+    max_copies_fn = _max_copies if (mode == "collection" or fmt == "coconut") else None
     synergy_bonus, synergy_info = compute_shift_synergy(pool)
+    if coconut is not None:
+        for name, bonus in compute_coconut_synergy(pool, coconut).items():
+            synergy_bonus[name] = max(synergy_bonus.get(name, 0.0), bonus)
     picks = allocate_deck(
         pool, max_copies_fn=max_copies_fn,
         synergy_bonus=synergy_bonus, synergy_info=synergy_info,
     )
+    if coconut is not None:
+        picks = ensure_coconut_associated_card(picks, pool, coconut_associated_name, max_copies_fn)
     total_cards = sum(qty for _, qty in picks)
 
     if not picks:
@@ -1190,6 +1331,23 @@ def build_deck(
     sorted_picks = sorted(picks, key=lambda p: (p[0].get("cost") or 0, p[0].get("fullName", "")))
 
     lines = [f"**Built deck** — {colors_display} · {fmt_label} · {mode} mode\n"]
+
+    if coconut is not None:
+        subtitle = (coconut.get("subtitle") or "").strip('"')
+        lines.append(f"### Coconut: {coconut.get('name')} - {subtitle} ({coconut.get('color')})")
+        for ability in coconut.get("abilities", []):
+            effect = ability.get("effect", "")
+            if effect and "up to 4 copies" not in effect:
+                lines.append(f"- {effect}")
+        lines.append(
+            f"- Up to 4 copies of **{coconut_associated_name}** allowed; "
+            "every other card in this deck is singleton (1 copy max)."
+        )
+        lines.append(
+            "- Format Coconut plays to 25 lore (not 20) and is designed for 3-4 players. "
+            "Open beta since 2026-07-28 — rules and the Coconut card pool may still change."
+        )
+        lines.append("")
 
     if rotation_note:
         lines.append(rotation_note)
@@ -1243,6 +1401,15 @@ def build_deck(
         f"- {'OK' if len(colors) <= max_colors else 'OVER'}: "
         f"at most {max_colors} ink color(s) ({len(colors)} used)"
     )
+    if fmt == "coconut":
+        over_singleton = [
+            card.get("fullName", "") for card, qty in sorted_picks
+            if card.get("fullName") != coconut_associated_name and qty > 1
+        ]
+        lines.append(
+            f"- {'OK' if not over_singleton else 'OVER'}: singleton respected "
+            f"(only {coconut_associated_name} may exceed 1 copy)"
+        )
     lines.append("")
 
     if mode == "collection":

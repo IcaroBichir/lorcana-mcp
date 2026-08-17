@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.0 — 2026-08-17
+
+Adds Format Coconut support to `build_deck` — Ravensburger's new multiplayer singleton beta (open since 2026-07-28, see `https://www.disneylorcana.com/en-US/news/2026/07/format-coconut`). Major version bump because this changes `build_deck`'s deck-legality shape for the new format (singleton instead of 4-of, a mandatory Coconut selection, no rotation/legality filtering) — every other tool and every existing `format` value (`core`, `infinity`, `core_zh`, `core_ja`, `poorcana`) is unchanged.
+
+- `build_deck(format="coconut", coconut_card="...")` builds a legal Coconut decklist: up to 3 ink colors (one must match the Coconut's own ink), singleton everywhere except the Coconut's own associated real character (up to 4 copies), no rotation/banned-list filtering (the beta format permits every released card). Output includes the Coconut's full ability text and a beta-status note.
+- `build_deck(format="coconut")` with no `coconut_card` lists all 18 beta Coconuts, grouped by ink, each with its ability text and a short hand-written "Focus" hint to help pick one; passing `ink_colors` too (still no `coconut_card`) filters that listing to just the matching ink(s) instead of building anything. `ink_colors` is otherwise still required, as it always was for every other format/mode.
+- New `api.py` functions: `fetch_format_coconut_cards()` (pulls the 18-card beta pool from LorcanaJSON's `formatCoconutCards.json`, cached 24h like every other card-data fetch) and `resolve_coconut_card()` (fuzzy name match against that pool).
+- New `deckbuilder.py` scoring: `compute_coconut_synergy()` — a hand-curated tag per Coconut (e.g. Scar → Ally characters, Ariel → Princess characters/Songs, Nick Wilde → Items) nudges the builder toward on-theme picks, the same scoped-synergy pattern already used for Shift-family keywords. `ensure_coconut_associated_card()` guarantees the Coconut's own character actually lands in the build at full copies — an expensive associated character was losing out to a flood of cheap tag-bonused filler in `allocate_deck`'s backfill pass (which ranks purely by global score, systematically favoring cheap cards) until this was added; found via a real build (Stitch - Rock Star, a 6-cost associated character, was landing zero copies) before release.
+- 32 new tests (278 → 310), covering the new `api.py`/`deckbuilder.py` functions and `build_deck`'s Coconut validation/build/listing paths.
+
+Format Coconut is Ravensburger's own beta — its rules and card pool can still change; see `formatCoconutCards.json`'s `metadata` for the data snapshot date if debugging a mismatch.
+
 ## 1.0.0 — 2026-08-14
 
 First stable release. All 10 tools (`enrich_csv`, `lookup_card`, `resolve_card`, `search_cards`, `find_song_synergies`, `filter_collection`, `audit_csv`, `analyze_deck`, `what_am_i_missing`, `build_deck`) have been in active daily use managing a real collection since v0.1.0, backed by a 278-test suite that now runs in CI on Python 3.11–3.13 for every PR (added in 0.2.8). `Development Status` in `pyproject.toml` moves from Alpha to Production/Stable to match. No functional or breaking changes from 0.2.10 — this release is the docstring rewrite below plus the version/maturity bump.

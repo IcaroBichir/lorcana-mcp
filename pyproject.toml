@@ -1,6 +1,6 @@
 [project]
 name = "lorcana-mcp"
-version = "1.0.0"
+version = "2.0.0"
 description = "MCP server for Disney Lorcana TCG: enrich TCGPlayer collection exports, look up and search cards, auto-build legal decks, and audit your collection against live card data"
 readme = "README.md"
 license = { file = "LICENSE" }
