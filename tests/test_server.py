@@ -18,7 +18,24 @@ def test_all_tools_registered():
     assert names == {
         "enrich_csv", "lookup_card", "resolve_card", "search_cards", "find_song_synergies",
         "filter_collection", "audit_csv", "analyze_deck", "what_am_i_missing", "build_deck",
+        "get_meta",
     }
+
+
+# ── get_meta (no network needed — pure static snapshot) ────────────────────────
+
+def test_get_meta_no_args_returns_full_snapshot():
+    from lorcana_mcp.server import get_meta
+    out = get_meta()
+    assert "Emerald/Steel" in out
+    assert "not live data" in out
+
+
+def test_get_meta_filters_by_ink_colors():
+    from lorcana_mcp.server import get_meta
+    out = get_meta(ink_colors="Amber,Sapphire")
+    assert "Amber/Sapphire" in out
+    assert "Amethyst/Steel" not in out
 
 
 # ── filter_collection — poorcana (no network needed) ──────────────────────────

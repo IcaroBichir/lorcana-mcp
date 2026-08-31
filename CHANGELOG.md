@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.0 — 2026-08-31
+
+New tool: `get_meta(ink_colors="")` — a hand-maintained Core Constructed metagame snapshot (every two-ink pair's tier, rough meta share, and playstyle, plus recent tournament results), for answering "what's currently strong" without depending on a local reference file. Unlike every other tool, this isn't a live fetch — there's no free structured feed for competitive metagame share or tournament results, so `meta.py` bundles a versioned snapshot (dated `META_SNAPSHOT_DATE`) that only gets fresher when a release updates it. The tool's own output says this explicitly up front, lists its sources, and flags which rows have actually been checked against a real tournament result (currently just Emerald/Steel and Amber/Sapphire, against NAC 2026 Anaheim) versus older, unverified data. `ink_colors` optionally filters to one pair's row (order/case-insensitive, e.g. `"Emerald,Steel"` or `"Amber/Sapphire"`).
+
+Also fixes a real scoring bug in `build_deck(format="coconut", coconut_card="Robin Hood")`, found while sourcing data for the new tool: `deckbuilder.py`'s `_COCONUT_SYNERGY_TAGS["robin hood"]` and `server.py`'s `_COCONUT_FOCUS["robin hood"]` were both built on a fabricated "named Robin Hood chain" ability that doesn't exist — the real Coconut ability (confirmed against the actual beta card) is a one-shot "once per game, deal 1 damage to each opposing character," with no repeatable trigger and nothing for a deck to build toward. Removed the bogus synergy tags entirely (an honest "no synergy target" rather than guessing a new one) and corrected the display hint. Note: the Coconut's actual ability *text* shown to callers was never affected by this bug — `build_deck` always pulls that live from `formatCoconutCards.json`; only the internal scoring bias and menu hint were wrong.
+
+10 new tests (310 → 320) covering `meta.py`'s snapshot formatting/filtering and `get_meta`'s tool wiring.
+
 ## 2.0.0 — 2026-08-17
 
 Adds Format Coconut support to `build_deck` — Ravensburger's new multiplayer singleton beta (open since 2026-07-28, see `https://www.disneylorcana.com/en-US/news/2026/07/format-coconut`). Major version bump because this changes `build_deck`'s deck-legality shape for the new format (singleton instead of 4-of, a mandatory Coconut selection, no rotation/legality filtering) — every other tool and every existing `format` value (`core`, `infinity`, `core_zh`, `core_ja`, `poorcana`) is unchanged.

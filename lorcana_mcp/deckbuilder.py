@@ -353,7 +353,15 @@ _COCONUT_SYNERGY_TAGS: dict[str, list[tuple[str, str]]] = {
     "mr. incredible":  [("subtype", "Super")],
     "moana":           [("name_contains", "moana"), ("name_contains", "heihei"), ("name_contains", "pua")],
     "john silver":     [("type", "Location")],
-    "robin hood":      [("name_contains", "robin hood"), ("text_contains", "deal")],
+    # Robin Hood - Sneaky Sleuth's real ability (confirmed 2026-08-31 against
+    # the actual beta card, correcting an earlier fabricated "named Robin
+    # Hood" chain assumption) is a one-shot "once per game, deal 1 damage to
+    # each opposing character" — no repeatable trigger and nothing for a
+    # deck to build toward, so intentionally no synergy tags here. The
+    # `name_contains "robin hood"` / `text_contains "deal"` tags previously
+    # here rewarded a nonexistent payoff and the latter was also far too
+    # broad (matches any card whose text contains the word "deal").
+    "robin hood":      [],
     "tinker bell":     [("text_contains", "deal")],
     "sisu":            [("keyword", "Ward"), ("keyword", "Resist")],
     "pocahontas":      [("text_contains", "lore")],

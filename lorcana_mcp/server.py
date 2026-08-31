@@ -20,6 +20,7 @@ from .deckbuilder import (
     build_candidate_pool, allocate_deck, rotation_safe_set_codes, summarize_picks,
     compute_shift_synergy, compute_coconut_synergy, ensure_coconut_associated_card,
 )
+from .meta import format_meta_snapshot
 
 mcp = FastMCP(
     "Lorcana",
@@ -32,7 +33,9 @@ mcp = FastMCP(
         "analyze a deck list for curve, composition, and format legality, "
         "check a deck list against your collection for what's missing and its cost to complete, "
         "or automatically build a legal decklist for an ink pair/format from your collection, "
-        "an ideal deck priced to complete, or the full market-price build."
+        "an ideal deck priced to complete, or the full market-price build. "
+        "Also available: a hand-maintained Core Constructed metagame snapshot (tier list "
+        "plus recent tournament results) for players asking what's currently strong."
     ),
 )
 
@@ -1074,14 +1077,14 @@ _COCONUT_FOCUS: dict[str, str] = {
     "stitch":          "cheap-character swarm/flood",
     "ursula":          "Sing Together / big songs",
     "mickey mouse":    "Mickey Mouse Shift chain",
-    "mufasa":          "heavy inkwell ramp into big finishers",
+    "mufasa":          "one-time inkwell burst (once per game) into big finishers",
     "nick wilde":      "items-matter, 4-item lore burst",
     "snow white":      "Snow White + Seven Dwarfs combo",
     "donald duck":     "Boost payoff",
     "mr. incredible":  "Super challenge/removal",
     "moana":           "Moana/Heihei/Pua ramp",
     "john silver":     "Location tank",
-    "robin hood":      "Robin Hood damage chain",
+    "robin hood":      "one-shot board damage (once per game, no repeatable payoff)",
     "tinker bell":     "damage amplifier",
     "sisu":            "combat-stat questing (pairs with Ward/Resist)",
     "pocahontas":      "lore/challenge control",
@@ -1526,6 +1529,42 @@ def _duels_lookup_card(lj_card: dict) -> dict | None:
     if not set_code or number is None:
         return None
     return duels.get((set_code, int(number)))
+
+
+@mcp.tool()
+def get_meta(ink_colors: str = "") -> str:
+    """
+    Return a hand-maintained Core Constructed metagame snapshot: a tier list
+    of every two-ink pair (archetype name, tier, rough meta share, playstyle)
+    plus a summary of recent notable tournament results — for answering
+    "what's strong right now" or "how does my ink pair compare".
+
+    Unlike every other tool here, this is NOT a live fetch. There is no free,
+    structured feed for competitive metagame share or tournament decklists —
+    inkDecks.com and lorcana.gg publish this as HTML, and tournament results
+    circulate as social-media images, not an API. This tool instead returns a
+    versioned snapshot bundled into the package at release time (see
+    `lorcana_mcp/meta.py` and the CHANGELOG for when it was last refreshed).
+    The response always states its own snapshot date and source list up
+    front, and flags which rows have actually been checked against a real
+    recent tournament result versus older, unverified metagame-tracker data
+    — don't treat an old row's tier/meta-share as more current than it is.
+
+    Usage guidelines: reach for this when a player asks what's currently
+    good, whether a given ink pair is competitive, or wants context before
+    calling `build_deck` (e.g. checking a pair's tier before committing to
+    it). It complements `build_deck`/`analyze_deck`, which build or evaluate
+    one concrete decklist, by answering the broader "what's the field like"
+    question instead. It does not return full decklists — see the package's
+    reference docs (or run `build_deck(mode="market")`) for that.
+
+    Args:
+        ink_colors: Optional pair of ink colors to filter to one tier-list
+                    row, comma- or slash-separated, e.g. "Emerald,Steel" or
+                    "Amber/Sapphire" (order doesn't matter). Omit for the
+                    full tier list plus tournament summary.
+    """
+    return format_meta_snapshot(ink_colors)
 
 
 def main() -> None:
