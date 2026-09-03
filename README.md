@@ -31,18 +31,17 @@ Everything reads from public card APIs plus your own exported CSV — no account
 
 ### Get it running in under a minute
 
-**1. Install it:**
-```bash
-pip install lorcana-mcp
-```
+**Claude Desktop — one click:** download [`lorcana-mcp.mcpb`](https://github.com/IcaroBichir/lorcana-mcp/releases/latest) and double-click it (or **Settings → Extensions → Install extension…**). No terminal, no Python install, nothing to configure.
 
-**2. Connect it to Claude:**
-```bash
-claude mcp add lorcana -- lorcana-mcp serve
-```
-*(Using Claude Desktop instead? See [Add to Claude](#add-to-claude) below.)*
+**Everything else — one command:**
 
-**3. Talk to it:**
+**1. Connect it** (`uvx` fetches it on demand — [install uv](https://docs.astral.sh/uv/) first, or `pip install lorcana-mcp` and drop the `uvx`):
+```bash
+claude mcp add lorcana -- uvx lorcana-mcp serve
+```
+Using Claude Desktop config, Cursor, VS Code, Windsurf, Cline, or Zed instead? Every client is covered in **[docs/INSTALL.md](docs/INSTALL.md)**.
+
+**2. Talk to it:**
 Export your collection from TCGPlayer (**My Account → My Collection → Export**), then just say:
 > "Enrich my collection at /path/to/your/export.csv"
 
@@ -82,11 +81,14 @@ Eleven tools are available in Claude once the server is running:
 
 ## Install
 
+You don't have to install anything if you use `uvx` (below) or the Claude Desktop bundle. To install the package explicitly:
+
 ```bash
 pip install lorcana-mcp
+# or:  uv tool install lorcana-mcp
 ```
 
-Or from source:
+From source:
 
 ```bash
 git clone https://github.com/IcaroBichir/lorcana-mcp
@@ -94,36 +96,44 @@ cd lorcana-mcp
 pip install .
 ```
 
+**Claude Desktop bundle:** [`lorcana-mcp.mcpb`](https://github.com/IcaroBichir/lorcana-mcp/releases/latest) on the releases page — a one-click install that bundles its own runtime. Built from [`packaging/mcpb/`](packaging/mcpb/).
+
 ---
 
-## Add to Claude
+## Add to your client
+
+`lorcana-mcp` is a **local stdio server** — it runs on your machine, no hosting or API key. **[docs/INSTALL.md](docs/INSTALL.md) is the full guide**, with copy-paste config for every client. The short version:
+
+| Client | Supported | How |
+|---|---|---|
+| Claude Desktop | ✅ | One-click [`.mcpb` bundle](https://github.com/IcaroBichir/lorcana-mcp/releases/latest), or config below |
+| Claude Code | ✅ | `claude mcp add lorcana -- uvx lorcana-mcp serve` |
+| Cursor · VS Code · Windsurf · Cline · Zed | ✅ | stdio config — see [docs/INSTALL.md](docs/INSTALL.md) |
+| Any other stdio MCP client | ✅ | Command: `uvx lorcana-mcp serve` (or `lorcana-mcp serve` if pip-installed) |
+| Claude.ai (web) · ChatGPT | ❌ | Those need a hosted remote server; this one is local-only — see [docs/INSTALL.md](docs/INSTALL.md#what-this-server-cant-do) |
 
 ### Claude Code (CLI)
 
 ```bash
-claude mcp add lorcana -- lorcana-mcp serve
+claude mcp add lorcana -- uvx lorcana-mcp serve
 ```
 
-### Claude Desktop
+### Claude Desktop (manual config)
 
-Find `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%\Claude\`) and add:
+Easiest is the [one-click bundle](https://github.com/IcaroBichir/lorcana-mcp/releases/latest). To wire it up by hand instead, edit `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%\Claude\`, or **Settings → Developer → Edit Config**):
 
 ```json
 {
   "mcpServers": {
     "lorcana": {
-      "command": "lorcana-mcp",
-      "args": ["serve"]
+      "command": "uvx",
+      "args": ["lorcana-mcp", "serve"]
     }
   }
 }
 ```
 
-Restart Claude Desktop after saving.
-
-### Cursor / other MCP clients
-
-Any client that supports stdio MCP servers can use `lorcana-mcp serve` as the command.
+Use `"command": "lorcana-mcp", "args": ["serve"]` if you installed with `pip` rather than `uv`. Fully quit and reopen Claude Desktop after saving.
 
 ---
 

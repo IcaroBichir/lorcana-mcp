@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.1 — 2026-09-03
+
+Packaging and docs only — no code or behavior changes. `pip install lorcana-mcp` at 2.1.1 is byte-for-byte the same server as 2.1.0.
+
+Ships a **Claude Desktop bundle**. `packaging/mcpb/` builds `lorcana-mcp.mcpb` — a one-click MCP Bundle (manifest spec v0.4) that installs the server into Claude Desktop with no terminal and no `claude_desktop_config.json` editing. It's a thin launcher (`server/main.py` just runs `lorcana_mcp.server.mcp`), pinned to `lorcana-mcp==2.1.1`, so it always executes the same code as the PyPI package; Claude Desktop's bundled `uv` installs it on first launch. New `.github/workflows/bundle.yml` validates the manifest on PRs and, on a `v*` tag, packs the `.mcpb` and uploads it to that GitHub Release — it does not touch PyPI or the MCP Registry.
+
+New `docs/INSTALL.md` — canonical install guide with copy-paste config for Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, Cline, Zed, and any other stdio client, plus an explicit note that Claude.ai web and ChatGPT are unsupported by design (they require a hosted remote server, and the file-based tools can't run remotely anyway). README's "Add to Claude" section is now "Add to your client" with a support matrix.
+
 ## 2.1.0 — 2026-08-31
 
 New tool: `get_meta(ink_colors="")` — a hand-maintained Core Constructed metagame snapshot (every two-ink pair's tier, rough meta share, and playstyle, plus recent tournament results), for answering "what's currently strong" without depending on a local reference file. Unlike every other tool, this isn't a live fetch — there's no free structured feed for competitive metagame share or tournament results, so `meta.py` bundles a versioned snapshot (dated `META_SNAPSHOT_DATE`) that only gets fresher when a release updates it. The tool's own output says this explicitly up front, lists its sources, and flags which rows have actually been checked against a real tournament result (currently just Emerald/Steel and Amber/Sapphire, against NAC 2026 Anaheim) versus older, unverified data. `ink_colors` optionally filters to one pair's row (order/case-insensitive, e.g. `"Emerald,Steel"` or `"Amber/Sapphire"`).

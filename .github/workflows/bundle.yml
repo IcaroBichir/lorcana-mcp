@@ -1,0 +1,60 @@
+name: Bundle
+
+# Builds the Claude Desktop bundle (packaging/mcpb -> lorcana-mcp.mcpb).
+# - On PRs / pushes that touch the bundle: validate the manifest only.
+# - On a v* tag: pack the bundle and upload it to that GitHub Release.
+#
+# This workflow never touches PyPI or the MCP Registry — those stay manual
+# (see CLAUDE.md / packaging/mcpb/README.md). It only attaches the .mcpb artifact.
+
+on:
+  push:
+    tags: ["v*"]
+    branches: [main]
+    paths:
+      - "packaging/mcpb/**"
+      - ".github/workflows/bundle.yml"
+  pull_request:
+    paths:
+      - "packaging/mcpb/**"
+      - ".github/workflows/bundle.yml"
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # needed to upload the .mcpb to the release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install mcpb CLI
+        run: npm install -g @anthropic-ai/mcpb
+
+      - name: Validate manifest
+        working-directory: packaging/mcpb
+        run: mcpb validate manifest.json
+
+      - name: Check bundle version matches the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          MANIFEST_VER=$(python -c "import json;print(json.load(open('packaging/mcpb/manifest.json'))['version'])")
+          if [ "$TAG" != "$MANIFEST_VER" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match manifest version $MANIFEST_VER"
+            exit 1
+          fi
+
+      - name: Pack bundle
+        if: startsWith(github.ref, 'refs/tags/v')
+        working-directory: packaging/mcpb
+        run: mcpb pack . ../../lorcana-mcp.mcpb
+
+      - name: Upload bundle to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" lorcana-mcp.mcpb --clobber

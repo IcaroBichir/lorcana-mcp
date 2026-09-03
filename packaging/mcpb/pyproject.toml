@@ -1,0 +1,17 @@
+# Dependency spec for the Claude Desktop bundle (.mcpb).
+#
+# This project is deliberately just a thin launcher: `server/main.py` imports and
+# runs the published `lorcana-mcp` package, so the bundle always executes the same
+# code as `pip install lorcana-mcp`. Keep this version pinned to the package
+# version the bundle ships alongside (bump both together at release time).
+#
+# Claude Desktop runs this with its bundled `uv`, which creates an isolated
+# environment and installs `lorcana-mcp` (and its deps) from PyPI on first launch.
+[project]
+name = "lorcana-mcp-bundle"
+version = "2.1.0"
+description = "Claude Desktop bundle launcher for lorcana-mcp"
+requires-python = ">=3.11"
+dependencies = [
+    "lorcana-mcp==2.1.0",
+]
