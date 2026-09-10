@@ -20,7 +20,7 @@ def test_tier_list_covers_all_15_two_ink_pairs_exactly_once():
 
 
 def test_every_row_has_required_fields():
-    required = {"pair", "archetype", "tier", "meta_share", "style", "verified_nac_2026"}
+    required = {"pair", "archetype", "tier", "meta_share", "style", "verified_recent_event"}
     for row in CORE_TIER_LIST:
         assert required <= row.keys(), row
 

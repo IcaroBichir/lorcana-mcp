@@ -13,9 +13,9 @@ def cli() -> None:
 @cli.command()
 def serve() -> None:
     """Start the MCP server (stdio transport for Claude)."""
-    from .server import mcp
+    from .server import main
 
-    mcp.run()
+    main()
 
 
 @cli.group()

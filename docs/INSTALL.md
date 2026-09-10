@@ -225,7 +225,9 @@ command: lorcana-mcp
 args:    serve
 ```
 
-The server speaks MCP over stdio and needs no environment variables.
+The server speaks MCP over stdio and needs no environment variables. One optional
+one: set **`LORCANA_MCP_NO_UPDATE_CHECK=1`** (in the client's `env` block) to
+disable the daily "a newer version is on PyPI" check — see [Updating](#updating).
 
 ---
 
@@ -249,7 +251,9 @@ You should get ink color, cost, stats, keywords, full ability text, and an image
 - **`uvx` users:** `uvx` uses a cached copy. Refresh it with `uv cache clean lorcana-mcp` (or `uvx --refresh lorcana-mcp serve` once).
 - **`pip` users:** `pip install -U lorcana-mcp`.
 
-Card and price data refreshes itself every 24 hours; you don't need to update the package for new card data, only for new features or fixes.
+Card and price data refreshes itself every 24 hours; you don't need to update the package for new card data, only for new features, fixes, or a refreshed `get_meta` metagame snapshot.
+
+The server checks PyPI about once a day and, if you're behind, prints a one-line notice to stderr on startup (visible in Claude Code's MCP logs / Claude Desktop's log files) and appends a note to `get_meta`'s output. It's fail-silent, cached, and one request; disable it with `LORCANA_MCP_NO_UPDATE_CHECK=1`. You can also **Watch → Custom → Releases** on the repo or subscribe to `https://github.com/IcaroBichir/lorcana-mcp/releases.atom`.
 
 ---
 

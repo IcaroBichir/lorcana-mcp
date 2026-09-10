@@ -1,5 +1,35 @@
 # Changelog
 
+## 2.2.0 — 2026-09-10
+
+Two things: a refreshed `get_meta` metagame snapshot (three new events + tier-list corrections), and a new "you're running an old version" check.
+
+### Metagame snapshot refresh
+
+`meta.py` snapshot refresh (`META_SNAPSHOT_DATE` 2026-08-30 → 2026-09-10) with three new events, all sourced from @gaetancall's Instagram decklist posts:
+
+- **Disney Lorcana Challenge — Asia Championship 2026 (Hong Kong, EN Core).** Champion Michele Carretta on **Amethyst/Emerald "Discard / Ramp Control"** — a post–Set 13 archetype (Lyle Tiberius Rourke discard-matters lore drain, Retro Evolution Device / Chernabog ramp-reanimate, Prince Phillip - Vanquisher of Foes + Malicious, Mean, and Scary board wipe). Runner-up and 6 of the Top 8 ran **Amber/Amethyst "Madrigal Midrange."** Emerald/Steel (69% of the NAC 2026 field) was shut out of the Top 8.
+- **FL CCQ — St. Augustine (EN Core).** Both finalists (Hector Heras, SplooshMcgoo) on the same Amethyst/Emerald Discard deck — independent confirmation the archetype is repeatable.
+- **Disney Lorcana Challenge Japan 2026 / DLC Kobe (Core JA).** Japan's national Challenge, played on the Japanese/Asia rotation — a *wider* pool than EN Core (Sets 3–5 still legal). Tagged Core JA and explicitly **excluded from the EN tier-list rows** — it's a separate metagame. Champion Midori_K3064 on **Emerald/Steel "Diablo Villains,"** finalist Manabe on **Ruby/Sapphire Items**; a flat field of five archetypes across the Top 8. Full write-up in `lorcana/ChallengeJapan2026Kobe_top8_decklists.md`.
+
+EN tier-list changes off the two EN events: **Amethyst/Emerald D → A** (was "Flexible / niche / inconsistent"; it now *wins* events). **Amber/Amethyst** repurposed from "Evasive/Flood" to "Madrigal Midrange" and flagged as the shell that actually won NAC 2026. **Amber/Sapphire A → C** — the NAC 2026 title long credited to Amber/Sapphire here (and in `lorcana/NAC2026_top8_decklists.md`) was a **mislabel**: Dillon LeDuc's winning 60 contains zero Sapphire cards (Rafiki / Luisa Madrigal / Cheshire Cat - Inexplicable / Isis Vanderchill / Demona are all Amethyst), so it's Amber/Amethyst. @gaetancall's official NAC Top 8 post (also folded in here) confirms that champion list card-for-card and corrects the NAC file's "Sky = S4iler" footnote (two different players).
+
+Schema: the per-row `verified_nac_2026` flag is renamed **`verified_recent_event`** (now spans NAC 2026 + Asia Championship 2026 + the CCQ), and each `RECENT_TOURNAMENTS` entry's `top_16_archetype_counts` key is generalized to `placement_counts` + a `placement_label` string so a Top 8 or a Finals renders correctly. `get_meta`'s output column header and footnote are reworded from "vs. NAC 2026" to "vs. a recent championship". `get_meta`'s tool interface is unchanged.
+
+### "A newer version is available" check
+
+MCP has no way for a server to tell a client it's out of date, and neither PyPI nor the MCP Registry notifies anyone — so `.mcpb` users especially can sit on a stale build (the bundle pins an exact version) without knowing a refreshed metagame snapshot has shipped. New `lorcana_mcp/update_check.py`:
+
+- About once every 24h the server asks PyPI (`/pypi/lorcana-mcp/json`) for the latest published version. If it's newer than the running one, it prints a one-line notice to **stderr** on startup (Claude Code shows this in its MCP logs; Claude Desktop writes it to its log files) and appends a short note to **`get_meta`**'s output (so it reaches the model and gets relayed).
+- Never raises, never blocks: the answer is read from a local cache only (`~/.cache/lorcana-mcp/update_check.json`); the network refresh runs on a fire-and-forget daemon thread, so a truly fresh install just sees the notice one session late instead of stalling `mcp.run()`. Every failure path (offline, timeout, PyPI down, junk payload, unwritable cache) is silent.
+- Pre-release / non-numeric versions are never treated as an "update", so a stable install is never nagged toward an rc.
+- **Full opt-out:** set `LORCANA_MCP_NO_UPDATE_CHECK` to any non-empty value in the server's `env` — this short-circuits before any cache read, thread, or request.
+- `lorcana-mcp serve`, `server.main()`, and the `.mcpb` launcher now all route through one `main()` that does the check then `mcp.run()`.
+
+README gains a "Staying up to date" section (this check, `pip install -U`, and the GitHub Releases watch/`.atom` feed); `docs/INSTALL.md` documents the opt-out env var.
+
+Tests: 320 → 340 (20 for `update_check.py`; one `test_meta.py` assertion updated for the field rename). New `tests/conftest.py` disables the update check for every test so nothing hits the network.
+
 ## 2.1.1 — 2026-09-03
 
 Packaging and docs only — no code or behavior changes. `pip install lorcana-mcp` at 2.1.1 is byte-for-byte the same server as 2.1.0.

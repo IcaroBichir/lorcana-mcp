@@ -317,6 +317,25 @@ lorcana-mcp cache clear    Clear cached API responses
 
 ---
 
+## Staying up to date
+
+The card **data** is always live (fetched from public APIs, cached 24h) — but the
+bundled metagame snapshot (`get_meta`) and any tool/behaviour changes only move
+when you update the package:
+
+```bash
+pip install -U lorcana-mcp        # or: uv tool upgrade lorcana-mcp
+```
+
+Claude Desktop `.mcpb` users: re-download [`lorcana-mcp.mcpb`](https://github.com/IcaroBichir/lorcana-mcp/releases/latest) and reinstall — the bundle pins an exact version and does not auto-update. **Restart your MCP client after updating** so it reconnects to the new server.
+
+**Get told when there's a new release:**
+
+- The server checks PyPI about once a day (fail-silent, cached, one request) and, if it's behind, prints a one-line notice to stderr on startup — visible in Claude Code's MCP logs / Claude Desktop's log files — and appends a note to `get_meta`'s output. Opt out with `LORCANA_MCP_NO_UPDATE_CHECK=1` in the server's `env`.
+- Or watch the repo: **Watch → Custom → Releases**, or subscribe to the Atom feed `https://github.com/IcaroBichir/lorcana-mcp/releases.atom`.
+
+---
+
 ## Development
 
 ```bash
@@ -327,7 +346,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-320 tests, no network calls required. CI runs the full suite on Python 3.11, 3.12, and 3.13 on every pull request and on push to `main` (see [`.github/workflows/tests.yml`](.github/workflows/tests.yml)).
+340 tests, no network calls required. CI runs the full suite on Python 3.11, 3.12, and 3.13 on every pull request and on push to `main` (see [`.github/workflows/tests.yml`](.github/workflows/tests.yml)).
 
 ---
 

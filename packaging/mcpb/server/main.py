@@ -6,7 +6,7 @@ This is intentionally a one-line launcher. It runs the exact same stdio server a
 install that package into an isolated environment and start it without the user
 touching a terminal or a JSON config file.
 """
-from lorcana_mcp.server import mcp
+from lorcana_mcp.server import main
 
 if __name__ == "__main__":
-    mcp.run()
+    main()

@@ -21,6 +21,7 @@ from .deckbuilder import (
     compute_shift_synergy, compute_coconut_synergy, ensure_coconut_associated_card,
 )
 from .meta import format_meta_snapshot
+from .update_check import startup_stderr_notice, get_meta_notice
 
 mcp = FastMCP(
     "Lorcana",
@@ -1564,8 +1565,9 @@ def get_meta(ink_colors: str = "") -> str:
                     "Amber/Sapphire" (order doesn't matter). Omit for the
                     full tier list plus tournament summary.
     """
-    return format_meta_snapshot(ink_colors)
+    return format_meta_snapshot(ink_colors) + get_meta_notice()
 
 
 def main() -> None:
+    startup_stderr_notice()
     mcp.run()
