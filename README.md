@@ -384,7 +384,7 @@ If you're an AI agent (Claude or otherwise) with this MCP server connected, read
 1. **Always pass absolute paths** for `csv_path` / `input_path` / `collection_csv`. Relative paths resolve against the server process's cwd, not the user's — this fails silently or points at the wrong file. If you don't have an absolute path, ask the user or find the file first.
 2. **Default to `resolve_card` over `lookup_card`** unless the user gave you a name you're confident is exact and correctly spelled. When in doubt, `resolve_card` is strictly more forgiving and costs nothing extra.
 3. **Never hand-roll price lookups.** `find_song_synergies`, `what_am_i_missing`, and `build_deck` already call tcgcsv.com internally with 24h caching and cheapest-printing logic. Don't `curl` TCGPlayer or scrape prices yourself.
-4. **Gameplay is identical across printings** (base, Enchanted, Epic, promo — same name, cost, stats, abilities). Every price-aware tool already picks the cheapest printing automatically; don't second-guess a suspiciously low result, and don't treat rarity as a gameplay signal.
+4. **Gameplay is identical across printings** (base, Enchanted, Epic, promo — same name, cost, stats, abilities). Every price-aware tool already picks the cheapest printing automatically; don't second-guess a suspiciously low result, and don't treat rarity as a gameplay signal. Use `list_printings` when the user needs the per-printing breakdown (which one is legal in a format, which is cheapest, whether it got an Enchanted).
 5. **If a user says data looks wrong or stale**, suggest `lorcana-mcp cache clear` before assuming a tool is broken — card and price data is cached 24h.
 6. **Ambiguous tool output is a feature, not an error.** `resolve_card` and `find_song_synergies` can return a ranked "did you mean" list instead of a single answer — present it to the user rather than guessing which one they meant.
 7. **`build_deck` is a curve/keyword-value heuristic, not a synergy engine.** It doesn't detect multi-card combos (Merlin/Mim bounce, Steelsong, etc.) — don't present its output as a finished, tournament-tuned decklist. Treat it as a strong starting point to review and adjust, not a final answer.
@@ -397,9 +397,9 @@ If you're an AI agent (Claude or otherwise) with this MCP server connected, read
 
 ### If you're modifying this codebase
 
-- Run `pytest` before and after any change — 320 tests, all network-free (external calls are mocked).
-- Code layout: pure/testable logic lives in `api.py` (card data + fuzzy matching + pricing), `deck.py` (deck list parsing/analysis), and `enricher.py` (CSV pipeline). `server.py` only wraps those as MCP tools and formats output — keep it that way rather than putting logic directly in tool functions.
-- A release touches four files together: `pyproject.toml` (version), `server.json` (version, for the MCP Registry), `CHANGELOG.md` (entry), and this README if tool behavior changed. Check `git log` for the pattern.
+- Run `pytest` before and after any change — 355 tests, all network-free (external calls are mocked; `tests/conftest.py` also disables the PyPI update check).
+- Code layout: pure/testable logic lives in `api.py` (card data + fuzzy matching + pricing), `deck.py` (deck list parsing/analysis), `enricher.py` (CSV pipeline), `meta.py` + `tournaments.py` (bundled metagame/tournament snapshot), and `update_check.py` (PyPI version check). `server.py` only wraps those as MCP tools and formats output — keep it that way rather than putting logic directly in tool functions. `lorcana_mcp/data/allcards_fallback.json.gz` is the offline card-data fallback (refresh with `scripts/update_fallback_snapshot.py`).
+- A release bumps the version in **four files** (`pyproject.toml`, `server.json`, `packaging/mcpb/pyproject.toml` — both its `version` and the `lorcana-mcp==` pin — and `packaging/mcpb/manifest.json`), adds a `CHANGELOG.md` entry, and updates this README + `docs/INSTALL.md` if tool behavior changed. Check `git log` for the `chore: release X.Y.Z` pattern.
 - Publishing is a separate, explicit step (`python -m build`, `twine upload`, `mcp-publisher publish`) — never assume a version bump in `pyproject.toml` means it's live on PyPI or the registry. Check before telling a user a feature is "available."
 
 <!-- mcp-name: io.github.IcaroBichir/lorcana -->
