@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "lorcana-mcp",
   "display_name": "Disney Lorcana TCG Collection",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Turn a TCGPlayer collection export into a full card database, look up and search cards, check deck legality, price out what a deck costs to finish, and auto-build legal decklists — all from inside Claude.",
   "long_description": "lorcana-mcp connects Claude to Disney Lorcana card data and your own collection. Export your collection from TCGPlayer, hand the CSV to Claude, and it comes back enriched with ink cost, stats, keywords, abilities, and format legality, plus a file ready to import into dreamborn.ink. It can also look up or fuzzy-resolve any card, search the whole card pool by any combination of filters, find which characters can sing a given song, check a deck list for curve and tournament legality, tell you what you're missing to finish a deck and roughly what it would cost at current market prices, and assemble a legal curve-balanced decklist for an ink pair or for Format Coconut. All card data comes from public APIs (LorcanaJSON, lorcana-api.com, duels.ink, tcgcsv.com) cached locally for 24 hours — no account, no API key, nothing to configure.",
   "author": {
@@ -27,6 +27,7 @@
     { "name": "enrich_csv", "description": "Enrich a raw TCGPlayer collection export with ink cost, type, subtypes, stats, inkable flag, keywords, abilities, and format legality; write an enriched CSV and a dreamborn.ink-ready import file." },
     { "name": "lookup_card", "description": "Look up a card by its exact name — full stats, ability text, format legality, and image URL." },
     { "name": "resolve_card", "description": "Fuzzy-resolve an informal, misspelled, or subtitle-less card name into a confident match or a ranked shortlist." },
+    { "name": "list_printings", "description": "List every printing of a card (or every card sharing a character name) side by side: set, number(s), cost, stats, rarity, per-format legality, and cheapest market price." },
     { "name": "search_cards", "description": "Search the whole card pool by color, type, rarity, set, cost range, keyword, ability text, or subtype, with pagination." },
     { "name": "find_song_synergies", "description": "Find every character that can sing a given song (or cost threshold), split into Singer-discount picks and plain cost-qualifiers; can flag which you own." },
     { "name": "filter_collection", "description": "Filter an enriched collection to the cards legal in a chosen format (core, infinity, core_zh, core_ja, poorcana)." },
@@ -34,7 +35,7 @@
     { "name": "analyze_deck", "description": "Analyze a deck list for ink curve, inkable split, color split, card types, estimated lore per turn, and Core Constructed legality." },
     { "name": "what_am_i_missing", "description": "Compare a deck list against your collection — what you own, what's missing or short, and a market-price estimate to complete it." },
     { "name": "build_deck", "description": "Assemble a legal, curve-balanced ~60-card decklist for an ink pair or Format Coconut, in collection / ideal / market mode." },
-    { "name": "get_meta", "description": "Return a hand-maintained Core Constructed metagame snapshot — each two-ink pair's tier, rough share, and style, plus recent tournament results." }
+    { "name": "get_meta", "description": "Return a hand-maintained Core Constructed metagame snapshot — each two-ink pair's tier, rough share, and style, plus recent tournament results; with event= returns that tournament's full standings and decklists." }
   ],
   "compatibility": {
     "claude_desktop": ">=0.10.0",

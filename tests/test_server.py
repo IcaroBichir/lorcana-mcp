@@ -16,9 +16,9 @@ def test_all_tools_registered():
     from lorcana_mcp.server import mcp
     names = {t.name for t in mcp._tool_manager.list_tools()}
     assert names == {
-        "enrich_csv", "lookup_card", "resolve_card", "search_cards", "find_song_synergies",
-        "filter_collection", "audit_csv", "analyze_deck", "what_am_i_missing", "build_deck",
-        "get_meta",
+        "enrich_csv", "lookup_card", "resolve_card", "list_printings", "search_cards",
+        "find_song_synergies", "filter_collection", "audit_csv", "analyze_deck",
+        "what_am_i_missing", "build_deck", "get_meta",
     }
 
 
@@ -36,6 +36,90 @@ def test_get_meta_filters_by_ink_colors():
     out = get_meta(ink_colors="Amber,Sapphire")
     assert "Amber/Sapphire" in out
     assert "Amethyst/Steel" not in out
+
+
+# ── list_printings (network fetches all stubbed) ──────────────────────────────
+
+def _lp_card(full_name, name, set_code, number, rarity, cost, s=None, w=None, lore=None, tcg=None):
+    d = {"fullName": full_name, "name": name, "setCode": set_code, "number": number,
+         "rarity": rarity, "cost": cost, "abilities": []}
+    for k, v in (("strength", s), ("willpower", w), ("lore", lore)):
+        if v is not None:
+            d[k] = v
+    if tcg is not None:
+        d["externalLinks"] = {"tcgPlayerId": tcg}
+    return d
+
+
+_LP_CARDS = [
+    _lp_card("Milo Thatch - Getting His Hands Dirty", "Milo Thatch", "12", 82, "Super Rare", 7, 5, 5, 3, tcg=111),
+    _lp_card("Milo Thatch - Getting His Hands Dirty", "Milo Thatch", "12", 230, "Enchanted", 7, 5, 5, 3, tcg=112),
+    _lp_card("Milo Thatch - King of Atlantis", "Milo Thatch", "3", 80, "Legendary", 7, 4, 4, 3, tcg=113),
+    _lp_card("Elsa - Spirit of Winter", "Elsa", "1", 42, "Legendary", 8, 4, 6, 3, tcg=114),
+]
+
+
+def _patch_lp(**extra):
+    from unittest.mock import patch
+    patchers = [
+        patch("lorcana_mcp.server.fetch_lorcana_json", return_value=_LP_CARDS),
+        patch("lorcana_mcp.server.fetch_duels_ink", return_value=[]),
+        patch("lorcana_mcp.server.fetch_tcgcsv_prices", return_value=extra.get("prices", {})),
+    ]
+    if "legal_fn" in extra:
+        patchers.append(patch("lorcana_mcp.server.lj_card_format_legal", side_effect=extra["legal_fn"]))
+    return patchers
+
+
+def _run_lp(name, fmt="", **extra):
+    import contextlib
+    from lorcana_mcp.server import list_printings
+    with contextlib.ExitStack() as stack:
+        for p in _patch_lp(**extra):
+            stack.enter_context(p)
+        return list_printings(name, fmt)
+
+
+def test_list_printings_bare_name_groups_all_subtitles():
+    out = _run_lp("Milo Thatch")
+    assert "Every card named" in out
+    assert "2 card(s), 3 printing(s)" in out
+    # base + Enchanted of one card collapse into a single row's Printings cell
+    assert "#82 Super Rare, #230 Enchanted" in out
+    assert "Milo Thatch - King of Atlantis" in out
+    assert "Elsa" not in out  # different character name, not matched
+
+
+def test_list_printings_full_name_matches_one_card():
+    out = _run_lp("Milo Thatch - King of Atlantis")
+    assert "1 card(s), 1 printing(s)" in out
+    assert "Getting His Hands Dirty" not in out
+
+
+def test_list_printings_fmt_column_and_ordering():
+    def legal_fn(card, fmt, lookup):
+        return card.get("number") == 82  # only Getting His Hands Dirty is "core"
+    out = _run_lp("Milo Thatch", fmt="core", legal_fn=legal_fn)
+    assert "Core EN?" in out
+    lines = [l for l in out.splitlines() if l.startswith("| Milo")]
+    assert lines[0].split("|")[1].strip() == "Milo Thatch - Getting His Hands Dirty"  # legal first
+    assert "✓" in lines[0] and "✗" in lines[1]
+
+
+def test_list_printings_prices_shown():
+    out = _run_lp("Milo Thatch", prices={111: 4.03, 113: 0.5})
+    assert "$4.03" in out
+    assert "$0.50" in out
+
+
+def test_list_printings_unknown_fmt_rejected():
+    out = _run_lp("Milo Thatch", fmt="standard")
+    assert "Unknown fmt" in out
+
+
+def test_list_printings_not_found():
+    out = _run_lp("Totally Not A Card 9000")
+    assert "No card found" in out
 
 
 # ── filter_collection — poorcana (no network needed) ──────────────────────────

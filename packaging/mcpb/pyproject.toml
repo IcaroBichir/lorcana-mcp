@@ -9,9 +9,9 @@
 # environment and installs `lorcana-mcp` (and its deps) from PyPI on first launch.
 [project]
 name = "lorcana-mcp-bundle"
-version = "2.2.0"
+version = "2.3.0"
 description = "Claude Desktop bundle launcher for lorcana-mcp"
 requires-python = ">=3.11"
 dependencies = [
-    "lorcana-mcp==2.2.0",
+    "lorcana-mcp==2.3.0",
 ]

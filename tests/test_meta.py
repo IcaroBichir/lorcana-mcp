@@ -67,3 +67,60 @@ def test_format_meta_snapshot_unknown_pair_lists_valid_options():
     out = format_meta_snapshot("Fire,Water")
     assert "No tier-list entry" in out
     assert "Emerald/Steel" in out  # valid pairs listed as a hint
+
+
+# ── event mode (full standings + decklists) ──────────────────────────────────
+
+def test_get_meta_event_returns_full_decklists():
+    from lorcana_mcp.server import get_meta
+    out = get_meta(event="nac")
+    assert "North American Championship 2026" in out
+    assert "## Final standings" in out
+    assert "## Decklists" in out
+    assert "4x Darkwing Duck - Crime Fighter" in out  # a real card line
+    assert "(60 cards)" in out                        # per-list total footer
+
+
+def test_get_meta_event_key_and_fragment_both_resolve():
+    from lorcana_mcp.server import get_meta
+    by_key = get_meta(event="dlc-kobe-2026")
+    by_frag = get_meta(event="kobe")
+    assert by_key == by_frag
+    assert "Core JA" in by_key
+
+
+def test_get_meta_ambiguous_event_lists_candidates():
+    from lorcana_mcp.server import get_meta
+    out = get_meta(event="2026")
+    assert "matches several events" in out
+    assert "nac-2026" in out
+
+
+def test_get_meta_unknown_event_lists_all():
+    from lorcana_mcp.server import get_meta
+    out = get_meta(event="does-not-exist")
+    assert "No tournament matches" in out
+    assert "nac-2026" in out
+
+
+def test_get_meta_plain_output_points_at_events():
+    from lorcana_mcp.server import get_meta
+    out = get_meta()
+    assert "Full standings + decklists" in out
+    assert 'get_meta(event="nac")' in out
+
+
+def test_every_unflagged_bundled_decklist_sums_to_60():
+    """Any bundled list whose count is off from 60 must say so in its label
+    or note (a '⚠'), so consumers aren't misled."""
+    from lorcana_mcp.tournaments import TOURNAMENTS, _leading_count
+    for key, t in TOURNAMENTS.items():
+        for d in t["decklists"]:
+            total = sum(_leading_count(c) for c in d["cards"])
+            if total == 0:
+                continue  # partial "notable cards" list, no counts on purpose
+            flagged = "⚠" in (d["label"] + (d.get("note") or ""))
+            if flagged:
+                assert total != 60, f'{key} / {d["label"]}: flagged but actually 60'
+            else:
+                assert total == 60, f'{key} / {d["label"]}: {total} cards, not flagged'

@@ -51,13 +51,14 @@ That's it — Claude does the rest. Everything below is reference detail for whe
 
 ## Tools
 
-Eleven tools are available in Claude once the server is running:
+Twelve tools are available in Claude once the server is running:
 
 | Tool                  | What it does |
 |-----------------------|---|
 | `enrich_csv`          | Enriches a raw TCGPlayer export with Ink, Cost, Type, Subtypes, STR/WIL/Lore, Inkable, Keywords, and Abilities. Writes an enriched CSV and a dreamborn.ink-ready import file next to the input. `refresh_prices=True` also refreshes TCG Market Price with a live tcgcsv.com lookup. |
 | `lookup_card`         | Looks up any card by name. Returns full stats, ability text, format legality, and card image URL. |
 | `resolve_card`        | Fuzzy-resolves an informal, misspelled, or subtitle-less card name (e.g. "goofy musketeer", "elsa"). Returns a single confident match, a ranked top-3 to disambiguate, or nothing found. |
+| `list_printings`      | Lists every printing of a card — or every card sharing a character name — side by side: set, number(s), cost, stats, rarity, per-format legality, and cheapest market price. Optional `fmt` adds a ✓/✗ legality column. For "which printing of X is Core-legal / cheapest?". |
 | `search_cards`        | Searches the full card pool by color, type, rarity, set, cost range, keyword, ability text, or subtype — with pagination. |
 | `find_song_synergies` | Finds every character that can sing a given song (or a raw cost threshold), split into Singer-keyword discount picks and plain cost-qualifiers. Optionally flags which ones you own. |
 | `filter_collection`   | Filters your collection to cards legal in a given format: `core`, `infinity`, `core_zh`, `core_ja`, or `poorcana`. |
@@ -65,7 +66,7 @@ Eleven tools are available in Claude once the server is running:
 | `analyze_deck`        | Analyzes a raw deck list (`4x Card Name` per line) for ink curve, inkable split, color split, card types, estimated lore/turn, and Core Constructed legality (60-card min, max 4 copies, ≤2 ink colors). |
 | `what_am_i_missing`   | Compares a deck list against your collection: what you already own, what's missing or short, and a live TCGPlayer cost estimate (via tcgcsv.com) to complete it. |
 | `build_deck`          | Automatically assembles a legal, curve-balanced ~60-card decklist for an ink pair/format, in one of 3 modes: `collection` (only cards you own), `ideal` (best deck regardless of ownership, priced to complete if you pass a collection CSV), or `market` (best deck, fully priced, ignoring ownership). Also builds for `format="coconut"` — Ravensburger's multiplayer singleton beta (up to 3 ink colors, 1 copy of everything except your chosen Coconut's associated character at up to 4). A heuristic curve/keyword-value builder, not a synergy/combo detector. |
-| `get_meta`            | Returns a hand-maintained Core Constructed metagame snapshot: every two-ink pair's tier, rough meta share, and playstyle, plus recent tournament results — optionally filtered to one pair (`ink_colors="Emerald,Steel"`). Not a live fetch — there's no free structured feed for this the way there is for card data — so it's a versioned snapshot bundled at release time, and says so explicitly in its own output. |
+| `get_meta`            | Returns a hand-maintained Core Constructed metagame snapshot: every two-ink pair's tier, rough meta share, and playstyle, plus recent tournament results — optionally filtered to one pair (`ink_colors="Emerald,Steel"`). With `event=` ("nac", "asia", "kobe", …) returns that tournament's full standings and decklists instead. Not a live fetch — there's no free structured feed for this the way there is for card data — so it's a versioned snapshot bundled at release time, and says so explicitly in its own output. |
 
 ---
 
@@ -265,8 +266,9 @@ The enricher adds these 10 columns to the raw TCGPlayer export:
 | [LorcanaJSON](https://lorcanajson.org) | All sets (1–14+) | Primary source for Set 12+; fallback for 1–11 |
 | [lorcana-api.com](https://lorcana-api.com) | Sets 1–11 | Preferred for Sets 1–11 (richer body text) |
 | [duels.ink](https://duels.ink) | All sets | Format legality, card images |
+| [tcgcsv.com](https://tcgcsv.com) | All sets | TCGPlayer market prices (daily mirror) |
 
-Card data is cached locally for 24 hours at `~/.cache/lorcana-mcp/`. Manage the cache with the CLI:
+Card data is fetched live and cached locally for 24 hours at `~/.cache/lorcana-mcp/`. If LorcanaJSON is unreachable, the server falls back to a **bundled card snapshot** (`lorcana_mcp/data/allcards_fallback.json.gz`, refreshed each release) and warns once that data may be stale. Manage the cache with the CLI:
 
 ```bash
 lorcana-mcp cache stats   # show entry count, expiry status, and file size
@@ -346,7 +348,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-340 tests, no network calls required. CI runs the full suite on Python 3.11, 3.12, and 3.13 on every pull request and on push to `main` (see [`.github/workflows/tests.yml`](.github/workflows/tests.yml)).
+355 tests, no network calls required. CI runs the full suite on Python 3.11, 3.12, and 3.13 on every pull request and on push to `main` (see [`.github/workflows/tests.yml`](.github/workflows/tests.yml)).
 
 ---
 
@@ -368,6 +370,7 @@ If you're an AI agent (Claude or otherwise) with this MCP server connected, read
 | To bring stale prices up to date without re-exporting | `enrich_csv` with `refresh_prices=True` | manually curling TCGPlayer |
 | Stats on a card whose exact name they gave you | `lookup_card` | — |
 | A card by an informal, partial, or misspelled name (e.g. "goofy musketeer", "big pete", "elsa") | `resolve_card` | `lookup_card` — it only does plain substring matching and will falsely report "not found" for anything without exact dashes/spelling |
+| Which printing of a card is legal in a format / cheapest to buy / whether it got an Enchanted | `list_printings` (pass `fmt` for a legality column) | `lookup_card` — it silently returns only the newest printing |
 | To browse/filter the whole card pool (by color, type, rarity, set, cost, keyword, ability text, subtype) | `search_cards` | — |
 | Singer combos / "who can sing this song for free" | `find_song_synergies` | — |
 | Format legality of their collection (Core, Infinity, Poorcana, etc.) | `filter_collection` | — |

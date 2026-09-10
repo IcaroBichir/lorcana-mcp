@@ -925,3 +925,37 @@ class TestResolveCoconutCard:
 
     def test_empty_query_returns_none(self):
         assert resolve_coconut_card("", self._POOL) is None
+
+
+# ── bundled LorcanaJSON fallback snapshot ─────────────────────────────────────
+
+class TestFallbackSnapshot:
+    def test_bundled_snapshot_loads_and_is_shaped_right(self):
+        from lorcana_mcp.api import _load_fallback_lorcana_json
+        data = _load_fallback_lorcana_json()
+        assert data is not None
+        assert len(data["cards"]) > 2000
+        assert len(data["sets"]) > 10
+        assert "metadata" in data
+
+    def test_fetch_falls_back_to_snapshot_on_network_failure(self):
+        import lorcana_mcp.api as api
+
+        def boom(url):
+            raise OSError("simulated outage")
+
+        with patch.object(api, "_fetch", side_effect=boom), \
+             patch.object(api._cache, "get", return_value=None), \
+             patch.object(api._cache, "set"):
+            data = api._fetch_lorcana_json_full()
+        assert len(data["cards"]) > 2000
+        assert len(data["sets"]) > 10
+
+    def test_fetch_still_raises_if_snapshot_also_unavailable(self):
+        import lorcana_mcp.api as api
+
+        with patch.object(api, "_fetch", side_effect=OSError("no net")), \
+             patch.object(api, "_load_fallback_lorcana_json", return_value=None), \
+             patch.object(api._cache, "get", return_value=None):
+            with pytest.raises(OSError):
+                api._fetch_lorcana_json_full()

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.3.0 — unreleased
+
+Three additions, prompted by a feature comparison against `gregario/lorcana-oracle` and `danielenricocahall/lorcana-mcp`:
+
+**New tool `list_printings`.** Given a full card name or a bare character name, lists every printing side by side — set, card number(s), cost, stats, rarity, per-format legality (duels.ink), and the cheapest market price to acquire it (tcgcsv.com). Base + Enchanted/Epic printings of one card collapse into a single row. Optional `fmt` arg (core / infinity / core_ja / core_zh / poorcana / coconut) adds a ✓/✗ legality column and sorts legal-first. `lookup_card` silently returns only the newest printing; this is for when the answer depends on *which* one ("is any Milo Thatch legal in Core?", "which Elsa is cheapest?", "did this get an Enchanted?"). 12 tools now.
+
+**Bundled offline fallback for card data.** `lorcana_mcp/data/allcards_fallback.json.gz` (~1.1 MB) ships in the wheel — a gzipped copy of LorcanaJSON's `allCards.json`. When the live fetch fails, `api._fetch_lorcana_json_full()` falls back to it (one stderr staleness warning, then the 24h cache serves it) instead of raising, so `lookup_card` / `search_cards` / `build_deck` keep working offline or during a LorcanaJSON outage. Still live-first when online. Refresh with `python scripts/update_fallback_snapshot.py` (run each release).
+
+**`get_meta(event=...)` — full tournament decklists.** New `lorcana_mcp/tournaments.py` bundles complete standings + decklists for NAC 2026, the Asia Championship 2026, DLC Kobe 2026 (Core JA), and the FL CCQ — the data that previously lived in loose `*_top8_decklists.md` files outside the package. `get_meta(event="nac" | "asia" | "kobe" | "fl-ccq" | …)` returns a chosen event's full detail; plain `get_meta()` output points at what's available. A test asserts every bundled 60-card list actually sums to 60 or is explicitly `⚠`-flagged (this surfaced several off-by-one counts inherited from the community-sourced NAC transcription — now flagged per-list).
+
++15 tests (340 → 355). New: `lorcana_mcp/tournaments.py`, `lorcana_mcp/data/allcards_fallback.json.gz`, `scripts/update_fallback_snapshot.py`.
+
 ## 2.2.0 — 2026-09-10
 
 Two things: a refreshed `get_meta` metagame snapshot (three new events + tier-list corrections), and a new "you're running an old version" check.

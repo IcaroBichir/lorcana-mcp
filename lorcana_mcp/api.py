@@ -2,11 +2,17 @@
 from __future__ import annotations
 
 import difflib
+import gzip
 import json
 import re
+import sys
 import urllib.request
+from pathlib import Path
 
 from . import cache as _cache
+
+_FALLBACK_LJ_PATH = Path(__file__).parent / "data" / "allcards_fallback.json.gz"
+_fallback_lj_warned = False
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -414,10 +420,40 @@ def fetch_lorcana_api() -> list[dict]:
     return cards
 
 
+def _load_fallback_lorcana_json() -> dict | None:
+    """The gzipped LorcanaJSON snapshot bundled in the package (data/), used
+    only when the live fetch fails. Warns once per process about staleness.
+    Returns None if the bundled file is missing or unreadable."""
+    global _fallback_lj_warned
+    try:
+        with gzip.open(_FALLBACK_LJ_PATH, "rt", encoding="utf-8") as f:
+            data = json.load(f)
+        if "cards" not in data or "sets" not in data:
+            return None
+    except Exception:
+        return None
+    if not _fallback_lj_warned:
+        gen = (data.get("metadata") or {}).get("generatedOn", "unknown date")
+        print(
+            f"[lorcana-mcp] LorcanaJSON fetch failed — falling back to the bundled "
+            f"card snapshot (generated {gen}). It may not include the newest set; "
+            f"run `lorcana-mcp cache clear` and retry once you're back online.",
+            file=sys.stderr, flush=True,
+        )
+        _fallback_lj_warned = True
+    return data
+
+
 def _fetch_lorcana_json_full() -> dict:
     """Fetch the raw LorcanaJSON payload and populate both the cards and
-    sets-metadata cache entries from a single network call."""
-    data = json.loads(_fetch("https://lorcanajson.org/files/current/en/allCards.json"))
+    sets-metadata cache entries from a single network call. Falls back to the
+    bundled snapshot (see _load_fallback_lorcana_json) if the fetch fails."""
+    try:
+        data = json.loads(_fetch("https://lorcanajson.org/files/current/en/allCards.json"))
+    except Exception:
+        data = _load_fallback_lorcana_json()
+        if data is None:
+            raise
     _cache.set("lorcana_json", data["cards"])
     _cache.set("lorcana_json_sets", data["sets"])
     return data

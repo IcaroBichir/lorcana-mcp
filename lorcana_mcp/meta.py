@@ -18,6 +18,8 @@ new fetch logic, since there's nothing live to fetch from.
 
 from __future__ import annotations
 
+from .tournaments import TOURNAMENTS, format_event, list_events
+
 META_SNAPSHOT_DATE = "2026-09-10"
 
 META_SOURCES = [
@@ -209,10 +211,17 @@ def _parse_ink_colors(ink_colors: str) -> frozenset[str] | None:
     return frozenset(parts) if parts else None
 
 
-def format_meta_snapshot(ink_colors: str = "") -> str:
-    """Render the bundled metagame snapshot as markdown, optionally filtered
-    to a single ink pair. See module docstring for what this is and isn't.
+def format_meta_snapshot(ink_colors: str = "", event: str = "") -> str:
+    """Render the bundled metagame snapshot as markdown.
+
+    With `event` set, returns that tournament's full standings + decklists
+    (see tournaments.py) instead of the tier list. Otherwise returns the
+    tier list, optionally filtered to one ink pair, plus the recent-results
+    summary and a pointer to the events that have full decklists.
     """
+    if event.strip():
+        return format_event(event)
+
     wanted = _parse_ink_colors(ink_colors)
     if wanted is not None and len(wanted) != 2:
         return (
@@ -280,5 +289,14 @@ def format_meta_snapshot(ink_colors: str = "") -> str:
                 f"{pair} ×{count}" for pair, count in t["placement_counts"].items()
             ))
             lines.append(f"- {t['headline']}")
+
+    if TOURNAMENTS:
+        lines.append("")
+        lines.append(
+            "**Full standings + decklists** for "
+            + ", ".join(f"`{k}`" for k in TOURNAMENTS)
+            + " — call `get_meta(event=\"<key or name fragment>\")` (e.g. "
+            "`get_meta(event=\"nac\")`, `get_meta(event=\"kobe\")`)."
+        )
 
     return "\n".join(lines)

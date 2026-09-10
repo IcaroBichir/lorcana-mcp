@@ -7,7 +7,7 @@ from mcp.server.fastmcp import FastMCP
 
 from .api import (
     search_card, abilities_from_lj, LJCODE_TO_SETNAME, SETNAME_TO_LJCODE,
-    fetch_duels_ink, build_duels_lookup, DUELS_FORMAT_LABELS,
+    fetch_duels_ink, build_duels_lookup, DUELS_FORMAT_LABELS, lj_card_format_legal,
     fetch_lorcana_json, fetch_lorcana_sets, filter_cards, filter_by_format,
     _card_colors, resolve_card as _resolve_card,
     singer_value, is_song, find_song_singers,
@@ -373,6 +373,173 @@ def resolve_card(name: str, set_name: str = "") -> str:
         )
     lines.append("\nCall lookup_card or resolve_card again with the exact name to get full details.")
     return "\n".join(lines)
+
+
+def _number_int(card: dict) -> int:
+    try:
+        return int(card.get("number"))
+    except (TypeError, ValueError):
+        return 10_000
+
+
+@mcp.tool()
+def list_printings(name: str, fmt: str = "") -> str:
+    """
+    List every printed version of a Lorcana card — or every card sharing a
+    character name — side by side: each one's set, card number(s), cost,
+    stats, rarity, per-format legality, and the cheapest market price to
+    acquire it.
+
+    Reach for this whenever the answer depends on *which* printing:
+    "is any Milo Thatch legal in Core?", "which Elsa is cheapest?", "did this
+    card ever get an Enchanted?", "what's the current-set version vs. the
+    rotated-out one?". `lookup_card` silently collapses to just the newest
+    printing; this shows them all.
+
+    Matching, in order: exact full name ("Elsa - Spirit of Winter"); exact
+    character name ("Elsa" → every distinct Elsa card); full-name substring;
+    then a fuzzy resolve. A bare character name lists every subtitle; a full
+    name lists that one card's base + Enchanted/Epic printings. Enchanted and
+    Epic printings are gameplay-identical to the base — they only change the
+    number, rarity, and price, which is exactly what this tool compares.
+
+    `fmt` (optional): one of core, infinity, core_ja, core_zh, poorcana,
+    coconut. When given, adds a legality column for just that format and lists
+    legal cards first. Legality/images come from duels.ink and prices from
+    tcgcsv.com (a daily TCGPlayer mirror); both are fetched live, cached 24h,
+    and shown as "?" / omitted (never errored) when unavailable.
+
+    Args:
+        name: A card's full name, or a bare character name.
+        fmt: Optional play format to flag legality for.
+    """
+    try:
+        lj_cards = fetch_lorcana_json()
+    except Exception as e:
+        return f"Failed to fetch card data: {e}"
+
+    q = name.strip().lower()
+    if not q:
+        return "Give a card name or a character name."
+
+    matches = [c for c in lj_cards if c.get("fullName", "").lower() == q]
+    scope = "full"
+    if not matches:
+        matches = [c for c in lj_cards if (c.get("name") or "").lower() == q]
+        scope = "character"
+    if not matches:
+        matches = [c for c in lj_cards if q in c.get("fullName", "").lower()]
+        scope = "substring"
+    if not matches:
+        res = _resolve_card(name)
+        if res["match_type"] == "not_found":
+            return f'No card found matching "{name}".'
+        if res["match_type"] == "resolved":
+            resolved = res["candidates"][0][1]
+            char = (resolved.get("name") or "").lower()
+            matches = [c for c in lj_cards if (c.get("name") or "").lower() == char]
+            scope = "character"
+        else:
+            lines = [f'"{name}" is ambiguous — did you mean one of these? '
+                     f"Call list_printings again with a full name:\n"]
+            for score, card in res["candidates"]:
+                lines.append(f"- **{card.get('fullName', '—')}** ({int(score * 100)}% match)")
+            return "\n".join(lines)
+
+    fmt = fmt.strip().lower()
+    valid_fmts = {"core", "infinity", "core_ja", "core_zh", "poorcana", "coconut"}
+    if fmt and fmt not in valid_fmts:
+        return f'Unknown fmt "{fmt}". Use one of: {", ".join(sorted(valid_fmts))}.'
+
+    try:
+        duels_lookup = build_duels_lookup(fetch_duels_ink())
+    except Exception:
+        duels_lookup = {}
+
+    price_by_pid: dict = {}
+    try:
+        price_by_pid = fetch_tcgcsv_prices()
+    except Exception:
+        pass
+
+    # group the matched entries by fullName (base + Enchanted/Epic share it)
+    groups: dict[str, list[dict]] = {}
+    for c in matches:
+        groups.setdefault(c.get("fullName", "—"), []).append(c)
+
+    rows = []
+    for full_name, entries in groups.items():
+        entries.sort(key=_number_int)
+        base = entries[0]
+        set_code = str(base.get("setCode"))
+        set_display = LJCODE_TO_SETNAME.get(set_code, f"Set {set_code}")
+        printings = ", ".join(
+            f"#{e.get('number')} {e.get('rarity', '?')}" for e in entries
+        )
+        stat_vals = [base.get("strength"), base.get("willpower"), base.get("lore")]
+        stats = "/".join(str(v) if v is not None else "—" for v in stat_vals) \
+            if any(v is not None for v in stat_vals) else "—"
+
+        duels_card = duels_lookup.get((set_code, _number_int(base)))
+        legality = (duels_card or {}).get("legality", [])
+        legal_str = ", ".join(DUELS_FORMAT_LABELS.get(f, f) for f in legality) or (
+            "—" if duels_card else "?"
+        )
+        fmt_ok = ""
+        if fmt:
+            fmt_ok = "✓" if lj_card_format_legal(base, fmt, duels_lookup) else "✗"
+
+        price = cheapest_price_for_card(full_name, lj_cards, price_by_pid)
+        price_str = f"${price:.2f}" if price is not None else "—"
+
+        rows.append({
+            "full_name": full_name, "set": set_display, "set_code": set_code,
+            "printings": printings, "cost": base.get("cost", "—"),
+            "stats": stats, "legal": legal_str, "fmt_ok": fmt_ok, "price": price_str,
+        })
+
+    def _recency(r):
+        try:
+            return int(r["set_code"])
+        except ValueError:
+            return -1
+
+    if fmt:
+        rows.sort(key=lambda r: (r["fmt_ok"] != "✓", -_recency(r), r["full_name"]))
+    else:
+        rows.sort(key=lambda r: (-_recency(r), r["full_name"]))
+
+    total_printings = sum(len(e) for e in groups.values())
+    if scope == "character":
+        header = f"**Every card named “{name}” — {len(groups)} card(s), {total_printings} printing(s)**"
+    else:
+        header = f"**{name} — {len(groups)} card(s), {total_printings} printing(s)**"
+
+    out = [header, ""]
+    any_price = any(r["price"] != "—" for r in rows)
+    fmt_col = f" {DUELS_FORMAT_LABELS.get(fmt, fmt)}? |" if fmt else ""
+    fmt_sep = " --- |" if fmt else ""
+    out.append(f"| Card | Set | Printings | Cost | STR/WIL/Lore | Legal in |{fmt_col} Cheapest |")
+    out.append(f"|---|---|---|---|---|---|{fmt_sep}---|")
+    for r in rows:
+        fmt_cell = f" {r['fmt_ok']} |" if fmt else ""
+        out.append(
+            f"| {r['full_name']} | {r['set']} | {r['printings']} | {r['cost']} "
+            f"| {r['stats']} | {r['legal']} |{fmt_cell} {r['price']} |"
+        )
+
+    notes = []
+    if not duels_lookup:
+        notes.append("_Legality unavailable (duels.ink fetch failed) — shown as \"?\"._")
+    if not any_price:
+        notes.append("_No TCGPlayer price data (tcgcsv.com fetch failed or no match)._")
+    else:
+        notes.append("_Prices are a live daily snapshot from tcgcsv.com — cheapest market "
+                     "price across all printings; treat as an estimate, not a quote._")
+    if notes:
+        out += ["", *notes]
+
+    return "\n".join(out)
 
 
 @mcp.tool()
@@ -1533,39 +1700,44 @@ def _duels_lookup_card(lj_card: dict) -> dict | None:
 
 
 @mcp.tool()
-def get_meta(ink_colors: str = "") -> str:
+def get_meta(ink_colors: str = "", event: str = "") -> str:
     """
     Return a hand-maintained Core Constructed metagame snapshot: a tier list
     of every two-ink pair (archetype name, tier, rough meta share, playstyle)
     plus a summary of recent notable tournament results — for answering
-    "what's strong right now" or "how does my ink pair compare".
+    "what's strong right now" or "how does my ink pair compare". With `event`
+    set, returns that tournament's full standings and decklists instead.
 
     Unlike every other tool here, this is NOT a live fetch. There is no free,
     structured feed for competitive metagame share or tournament decklists —
     inkDecks.com and lorcana.gg publish this as HTML, and tournament results
     circulate as social-media images, not an API. This tool instead returns a
     versioned snapshot bundled into the package at release time (see
-    `lorcana_mcp/meta.py` and the CHANGELOG for when it was last refreshed).
-    The response always states its own snapshot date and source list up
+    `lorcana_mcp/meta.py` / `tournaments.py` and the CHANGELOG for when it was
+    last refreshed). The response states its own snapshot date and sources up
     front, and flags which rows have actually been checked against a real
     recent tournament result versus older, unverified metagame-tracker data
     — don't treat an old row's tier/meta-share as more current than it is.
+    Tournament decklists are transcribed from card-grid images: counts/art
+    are reliable, but a few 1-of tech slots and some subtitles are best-effort
+    (per-list notes flag where).
 
     Usage guidelines: reach for this when a player asks what's currently
     good, whether a given ink pair is competitive, or wants context before
-    calling `build_deck` (e.g. checking a pair's tier before committing to
-    it). It complements `build_deck`/`analyze_deck`, which build or evaluate
-    one concrete decklist, by answering the broader "what's the field like"
-    question instead. It does not return full decklists — see the package's
-    reference docs (or run `build_deck(mode="market")`) for that.
+    calling `build_deck`. For a specific event's lists, pass `event` (the
+    plain snapshot output lists which events are available). It complements
+    `build_deck`/`analyze_deck`, which build or evaluate one concrete deck.
 
     Args:
         ink_colors: Optional pair of ink colors to filter to one tier-list
                     row, comma- or slash-separated, e.g. "Emerald,Steel" or
-                    "Amber/Sapphire" (order doesn't matter). Omit for the
-                    full tier list plus tournament summary.
+                    "Amber/Sapphire" (order doesn't matter). Ignored if
+                    `event` is set.
+        event: Optional tournament key or name fragment (e.g. "nac",
+               "kobe", "asia-championship-2026") to get that event's full
+               standings + decklists instead of the tier list.
     """
-    return format_meta_snapshot(ink_colors) + get_meta_notice()
+    return format_meta_snapshot(ink_colors, event) + get_meta_notice()
 
 
 def main() -> None:
