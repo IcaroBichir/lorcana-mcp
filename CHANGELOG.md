@@ -1,6 +1,18 @@
 # Changelog
 
-## 2.3.0 — unreleased
+## 2.4.0 — unreleased
+
+Metagame snapshot refresh: adds the **Disney Lorcana Challenge — Europe Championship 2026** (Disneyland Paris) to `get_meta`.
+
+- New event `europe-championship-2026` in `tournaments.py` — full standings + all 16 Top 16 decklists, sourced from official @disneylorcana Instagram posts (typed decklists, not a community transcription — lower transcription risk than the NAC file). `get_meta(event="europe")` returns it.
+- `META_SNAPSHOT_DATE` 2026-09-10 → 2026-09-13. `RECENT_TOURNAMENTS` gets a new headline entry.
+- Tier-list corroboration from the new data: **Emerald/Steel Darkwing Duck Tempo** placed 4 of 16 (still strong outside NAC, where it was 69% of the field). **Amber/Amethyst Madrigal Midrange** placed 2 of 16. **Amethyst/Emerald Discard / Ramp Control** (the Asia Championship + FL CCQ champion shell) made one Top 16 appearance — a third EN-Core region, corroborating it as a repeatable contender. **Amber/Emerald** needed a caveat added: it was the field's largest ink pair (7 of 16) but split across three unrelated shells — the champion's Aurora/Pocahontas "Protective" cost-discount build (5 of 16), an Items/Locations control build, and a Singer/Song build — none matching this row's existing "Aggro / unstoppable Evasive questors" description, which may now be stale.
+- `format_meta_snapshot`'s "Recent tournament results" renderer no longer assumes every event has a clear runner-up (`t["runner_up"]["pair"]` crashed on `None`) — the Europe Championship source only distinguishes Champion vs. undifferentiated Top 16, so `runner_up` is optional now and that line is omitted when absent.
+- Cleanup: `meta.py` had several stale references to `lorcana/*_top8_decklists.md` files that were deleted when their content moved into `tournaments.py` (see the 2.3.0 entry below) — reworded to point at `get_meta(event="...")` instead.
+
++2 tests (355 → 357).
+
+## 2.3.0 — 2026-09-10
 
 Three additions, prompted by a feature comparison against `gregario/lorcana-oracle` and `danielenricocahall/lorcana-mcp`:
 

@@ -103,6 +103,25 @@ def test_get_meta_unknown_event_lists_all():
     assert "nac-2026" in out
 
 
+def test_get_meta_europe_event_key_and_fragment_both_resolve():
+    from lorcana_mcp.server import get_meta
+    by_key = get_meta(event="europe-championship-2026")
+    by_frag = get_meta(event="europe")
+    assert by_key == by_frag
+    assert "Wojciech Złomek" in by_key
+    assert "(60 cards)" in by_key
+
+
+def test_recent_tournament_entry_without_runner_up_renders():
+    """Europe Championship 2026 has no clear runner-up in the source data
+    (only Champion vs. undifferentiated Top 16) — format_meta_snapshot must
+    not crash on a `runner_up: None` entry, and must simply omit that line."""
+    out = format_meta_snapshot()
+    assert "Disney Lorcana Challenge — Europe Championship 2026" in out
+    assert "Amber/Emerald (Wojciech Złomek)" not in out  # sanity: not mis-rendered
+    assert "**Champion:** Amber/Emerald" in out
+
+
 def test_get_meta_plain_output_points_at_events():
     from lorcana_mcp.server import get_meta
     out = get_meta()

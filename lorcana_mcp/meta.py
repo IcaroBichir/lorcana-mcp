@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from .tournaments import TOURNAMENTS, format_event, list_events
 
-META_SNAPSHOT_DATE = "2026-09-10"
+META_SNAPSHOT_DATE = "2026-09-13"
 
 META_SOURCES = [
     "inkDecks.com (metagame breakdown, tier lists)",
@@ -33,10 +33,12 @@ META_SOURCES = [
     "(@gaetancall Instagram champion/finalist decklist post) — EN Core Constructed",
     "Disney Lorcana Challenge Japan 2026 / DLC Kobe (Autumn), Kobe JP "
     "(@gaetancall Instagram Top 8 decklist post) — Core JA / Asia rotation, a "
-    "separate metagame from EN Core; see lorcana/ChallengeJapan2026Kobe_top8_decklists.md",
+    "separate metagame from EN Core; full decklists via get_meta(event=\"kobe\")",
     "Disney Lorcana North American Championship 2026 Top 8 "
-    "(@gaetancall Instagram official Top 8 decklist post — supersedes the earlier "
-    "community-sourced NAC2026_top8_decklists.md on any conflict)",
+    "(@gaetancall Instagram official Top 8 decklist post — supersedes an earlier "
+    "community-sourced pre-release transcription on any conflict)",
+    "Disney Lorcana Challenge — Europe Championship 2026, Disneyland Paris "
+    "(@disneylorcana official Instagram Top 16 decklist carousel posts) — EN Core Constructed",
 ]
 
 # Core Constructed ink-pair tier list. `meta_share` is a rough, mixed-source
@@ -48,12 +50,15 @@ META_SOURCES = [
 # June-2026-era data that predates those events and may itself be stale.
 CORE_TIER_LIST: list[dict] = [
     {"pair": ("Emerald", "Steel"), "archetype": "Darkwing Duck Tempo", "tier": "S",
-     "meta_share": "69% of NAC 2026 Top 16 (but absent from the Asia Championship 2026 Top 8)",
+     "meta_share": "69% of NAC 2026 Top 16; absent from the Asia Championship 2026 Top 8 but "
+                   "back to 4 of 16 at the Europe Championship 2026 — strong across regions, "
+                   "not just a one-event spike",
      "style": "Elinor/Mushu/Tod/Ursula/Vixey core + Darkwing Duck package + burn songs",
      "verified_recent_event": True},
     {"pair": ("Amber", "Amethyst"), "archetype": "Madrigal Midrange (was Evasive/Flood)",
      "tier": "S",
-     "meta_share": "won NAC 2026; 6 of 8 (incl. runner-up) at Asia Championship 2026",
+     "meta_share": "won NAC 2026; 6 of 8 (incl. runner-up) at Asia Championship 2026; "
+                   "2 of 16 at the Europe Championship 2026",
      "style": "Grandmother Willow/Hamm 2-drop curve-accel + Luisa Madrigal Shift chain "
               "(Pushing Through -> Confident Climber) + Tigger/Isis Vanderchill tempo + "
               "Gaston - Superior Archer removal + Ohana Means Family/The Horseman Strikes! draw",
@@ -62,11 +67,17 @@ CORE_TIER_LIST: list[dict] = [
      "meta_share": "~18%", "style": "Draw-heavy control; hard to run out of resources",
      "verified_recent_event": False},
     {"pair": ("Amber", "Emerald"), "archetype": "Aggro", "tier": "S",
-     "meta_share": "~17%", "style": "Fast board + unstoppable Evasive questors",
-     "verified_recent_event": False},
+     "meta_share": "~17% overall, but the Europe Championship 2026's 7-of-16 Amber/Emerald "
+                   "field split into three distinct shells, none matching this row's aggro "
+                   "description: the champion's Aurora/Pocahontas cost-discount 'Protective' "
+                   "build (5 of 16), an Items/Locations control build, and a Singer/Song "
+                   "build — the aggro/Evasive read below may be stale, treat with caution",
+     "style": "Fast board + unstoppable Evasive questors (see meta_share caveat)",
+     "verified_recent_event": True},
     {"pair": ("Amethyst", "Emerald"), "archetype": "Discard / Ramp Control", "tier": "A",
      "meta_share": "won the Asia Championship 2026 (+ a Top 4) and swept the FL CCQ "
-                   "St. Augustine final — both EN Core; no tracked field % yet",
+                   "St. Augustine final; 1 Top 16 at the Europe Championship 2026 — both EN "
+                   "Core; no tracked field % yet",
      "style": "Lyle Tiberius Rourke discard-matters lore drain + Retro Evolution Device/"
               "Chernabog ramp-reanimate + Hades - Looking for a Deal draw + "
               "Prince Phillip - Vanquisher of Foes / Malicious, Mean, and Scary board wipe",
@@ -106,10 +117,38 @@ CORE_TIER_LIST: list[dict] = [
 ]
 
 # One entry per known event, newest first. Placement counts only — no full
-# decklists here (that's what build_deck/analyze_deck are for, plus the
-# lorcana/*_top8_decklists.md files); this is a shape-of-the-field summary,
-# not a decklist database.
+# decklists here (call get_meta(event="...") for those, or see tournaments.py);
+# this is a shape-of-the-field summary, not a decklist database.
 RECENT_TOURNAMENTS: list[dict] = [
+    {
+        "name": "Disney Lorcana Challenge — Europe Championship 2026",
+        "date": "2026-09-13",
+        "location": "Disney Hotel New York - The Art of Marvel, Disneyland Paris (EN Core Constructed)",
+        "champion": {"pair": ("Amber", "Emerald"),
+                     "note": "Aurora / Pocahontas Protective (Wojciech Złomek)"},
+        "runner_up": None,
+        "placement_label": "Top 16 archetype breakdown",
+        "placement_counts": {
+            "Amber/Emerald Aurora/Pocahontas Protective": 5,
+            "Emerald/Steel Darkwing Duck Tempo": 4,
+            "Amber/Amethyst Madrigal Midrange": 2,
+            "Amber/Emerald (other)": 2,
+            "Amethyst/Ruby": 1,
+            "Emerald/Sapphire": 1,
+            "Amethyst/Emerald Discard": 1,
+        },
+        "headline": "Official @disneylorcana decklist posts (not community-sourced, unlike the "
+                    "NAC file) — full typed lists, low transcription risk. Amber/Emerald was the "
+                    "field's center of gravity at 7 of 16, but split across three distinct "
+                    "shells: the champion's Aurora - Holding Court / Pocahontas cost-discount "
+                    "'Protective' build (5 of 16), an Items/Locations control build (Douglas "
+                    "Auchelie), and a Singer/Song build (Florian Bertin) — don't conflate them "
+                    "as one archetype. Emerald/Steel Darkwing Duck Tempo (NAC 2026's dominant "
+                    "deck) placed 4 of 16 here too. Amethyst/Emerald Discard / Ramp Control (the "
+                    "Asia Championship + FL CCQ champion shell) made one Top 16 appearance, "
+                    "corroborating it as a real cross-region contender rather than a two-event "
+                    "fluke. Full standings + all 16 decklists via get_meta(event=\"europe\").",
+    },
     {
         "name": "Disney Lorcana Challenge Japan 2026 (DLC Kobe, Autumn)",
         "date": "2026-09-10",
@@ -135,8 +174,8 @@ RECENT_TOURNAMENTS: list[dict] = [
                     "tier list above and must not be folded into it. Far more diverse than "
                     "the EN events: five archetypes across the Top 8, none more than 2 copies. "
                     "Emerald/Steel 'Diablo Villains' won. Ink pairs for the six non-finalist "
-                    "decks are best-guess from card colours in the image grid. Full lists in "
-                    "lorcana/ChallengeJapan2026Kobe_top8_decklists.md.",
+                    "decks are best-guess from card colours in the image grid. Full lists via "
+                    "get_meta(event=\"kobe\").",
     },
     {
         "name": "Disney Lorcana Challenge — Asia Championship 2026",
@@ -158,8 +197,8 @@ RECENT_TOURNAMENTS: list[dict] = [
                     "runner-up. Emerald/Steel (69% of the NAC field) did not appear in the "
                     "Asia Top 8 — though a different Emerald/Steel build, 'Diablo Villains', "
                     "won the Core JA DLC Kobe the same period, so the pair is far from dead. "
-                    "Source: @gaetancall Top 8 post; full lists in "
-                    "lorcana/AsiaChampionship2026_top8_decklists.md.",
+                    "Source: @gaetancall Top 8 post; full lists via "
+                    "get_meta(event=\"asia\").",
     },
     {
         "name": "Disney Lorcana Championship Qualifier (CCQ) — St. Augustine, FL",
@@ -182,7 +221,7 @@ RECENT_TOURNAMENTS: list[dict] = [
         "location": "Disneyland Resort, Anaheim, CA",
         "champion": {"pair": ("Amber", "Amethyst"),
                      "note": "Madrigal Midrange (Dillon LeDuc) — once mislabeled 'Amber/Sapphire' "
-                             "here and in NAC2026_top8_decklists.md; @gaetancall's official Top 8 "
+                             "here, in an earlier snapshot; @gaetancall's official Top 8 "
                              "post shows the winning 60 card-for-card with zero Sapphire (Rafiki / "
                              "Luisa Madrigal / Cheshire Cat - Inexplicable / Isis Vanderchill / "
                              "Demona are all Amethyst)"},
@@ -276,14 +315,15 @@ def format_meta_snapshot(ink_colors: str = "", event: str = "") -> str:
         lines.append("## Recent tournament results")
         for t in RECENT_TOURNAMENTS:
             champ_a, champ_b = t["champion"]["pair"]
-            runner_a, runner_b = t["runner_up"]["pair"]
             lines.append(f"### {t['name']} — {t['date']}, {t['location']}")
             lines.append(
                 f"- **Champion:** {champ_a}/{champ_b} ({t['champion']['note']})"
             )
-            lines.append(
-                f"- **Runner-up:** {runner_a}/{runner_b} ({t['runner_up']['note']})"
-            )
+            if t.get("runner_up"):
+                runner_a, runner_b = t["runner_up"]["pair"]
+                lines.append(
+                    f"- **Runner-up:** {runner_a}/{runner_b} ({t['runner_up']['note']})"
+                )
             label = t.get("placement_label", "Placement breakdown")
             lines.append(f"- **{label}:** " + ", ".join(
                 f"{pair} ×{count}" for pair, count in t["placement_counts"].items()

@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "lorcana-mcp",
   "display_name": "Disney Lorcana TCG Collection",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Turn a TCGPlayer collection export into a full card database, look up and search cards, check deck legality, price out what a deck costs to finish, and auto-build legal decklists — all from inside Claude.",
   "long_description": "lorcana-mcp connects Claude to Disney Lorcana card data and your own collection. Export your collection from TCGPlayer, hand the CSV to Claude, and it comes back enriched with ink cost, stats, keywords, abilities, and format legality, plus a file ready to import into dreamborn.ink. It can also look up or fuzzy-resolve any card, search the whole card pool by any combination of filters, find which characters can sing a given song, check a deck list for curve and tournament legality, tell you what you're missing to finish a deck and roughly what it would cost at current market prices, and assemble a legal curve-balanced decklist for an ink pair or for Format Coconut. All card data comes from public APIs (LorcanaJSON, lorcana-api.com, duels.ink, tcgcsv.com) cached locally for 24 hours — no account, no API key, nothing to configure.",
   "author": {
