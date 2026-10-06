@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from lorcana_mcp.deckbuilder import (
     rotation_safe_set_codes,
+    preview_set_codes,
     build_candidate_pool,
     score_card,
     character_score,
@@ -88,6 +89,24 @@ class TestRotationSafeSetCodes:
         assert rotation_safe_set_codes({"1": {"allowedInFormats": {"Core": {"allowed": True}}}}) == set()
 
 
+# ── preview_set_codes ───────────────────────────────────────────────────────────
+
+class TestPreviewSetCodes:
+    def test_upcoming_sets_in_newest_group_but_not_rotated_ones(self):
+        sets_meta = {
+            "5": {"allowedInFormats": {"Core": {"allowed": False, "rotationGroup": 2}}},
+            "9": {"allowedInFormats": {"Core": {"allowed": True, "rotationGroup": 3}}},
+            "13": {"allowedInFormats": {"Core": {"allowed": True, "rotationGroup": 4}}},
+            "14": {"allowedInFormats": {"Core": {"allowed": False, "rotationGroup": 4}}},
+            "16": {"allowedInFormats": {"Core": {"allowed": False, "rotationGroup": 5}}},
+        }
+        assert preview_set_codes(sets_meta) == {"14", "16"}
+
+    def test_empty_when_nothing_legal(self):
+        assert preview_set_codes({}) == set()
+        assert preview_set_codes({"1": {"allowedInFormats": {"Core": {"allowed": False, "rotationGroup": 1}}}}) == set()
+
+
 # ── build_candidate_pool ─────────────────────────────────────────────────────────
 
 class TestBuildCandidatePool:
@@ -131,6 +150,21 @@ class TestBuildCandidatePool:
             rotation_safe_codes={"9"},
         )
         assert {c["fullName"] for c in pool} == {"Safe Set Card"}
+
+    def test_preview_codes_bypass_format_and_rotation_filters(self):
+        preview = _card("Preview Card", 2, "Character", ["Amber"], set_code="14", number=1)
+        legal = _card("Legal Card", 2, "Character", ["Amber"], set_code="13", number=1)
+        lookup = {("13", 1): _duels_entry()}  # duels.ink doesn't know set 14 yet
+        pool = build_candidate_pool(
+            [preview, legal], ["Amber"], "core", duels_lookup=lookup,
+            rotation_safe_codes={"13"}, preview_codes={"14"},
+        )
+        assert {c["fullName"] for c in pool} == {"Preview Card", "Legal Card"}
+
+    def test_preview_codes_still_respect_colors(self):
+        preview = _card("Preview Ruby", 2, "Character", ["Ruby"], set_code="14", number=1)
+        pool = build_candidate_pool([preview], ["Amber"], "core", duels_lookup={}, preview_codes={"14"})
+        assert pool == []
 
     def test_poorcana_uses_rarity_not_duels_lookup(self):
         common = _card("Common Card", 2, "Character", ["Amber"], rarity="Common")

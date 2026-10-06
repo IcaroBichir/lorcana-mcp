@@ -707,6 +707,48 @@ class TestBuildDeckRotationSafe:
         assert "rotation_safe is a Core-only concept" in result
 
 
+class TestBuildDeckIncludePreview:
+    _SETS = {
+        "9": {"name": "Fabled", "allowedInFormats": {"Core": {"allowed": True, "rotationGroup": 4}}},
+        "14": {"name": "Hyperia City", "releaseDate": "2026-10-23",
+               "allowedInFormats": {"Core": {"allowed": False, "rotationGroup": 4}}},
+    }
+
+    def _preview_card(self):
+        # Strong enough to always make the cut; absent from duels.ink.
+        return _bd_card("Amber Preview Star", 3, "Character", "Amber", set_code="14", number=1,
+                        strength=5, willpower=6, lore=3, keywords=["Evasive", "Ward"])
+
+    def test_off_by_default(self):
+        from lorcana_mcp.server import build_deck
+        cards, duels = _bd_abundant_pool()
+        with patch("lorcana_mcp.server.fetch_lorcana_json", return_value=cards + [self._preview_card()]), \
+             patch("lorcana_mcp.server.fetch_duels_ink", return_value=duels):
+            result = build_deck("Amber", mode="ideal", format="core")
+        assert "Amber Preview Star" not in result
+
+    def test_includes_and_marks_preview_cards(self):
+        from lorcana_mcp.server import build_deck
+        cards, duels = _bd_abundant_pool()
+        with patch("lorcana_mcp.server.fetch_lorcana_json", return_value=cards + [self._preview_card()]), \
+             patch("lorcana_mcp.server.fetch_duels_ink", return_value=duels), \
+             patch("lorcana_mcp.server.fetch_lorcana_sets", return_value=self._SETS):
+            result = build_deck("Amber", mode="ideal", format="core", include_preview=True)
+        assert "Amber Preview Star _(preview)_" in result
+        assert "x Amber Preview Star\n" in result  # import block stays clean
+        assert "Hyperia City (1 cards revealed, releases 2026-10-23)" in result
+
+    def test_noop_for_other_formats_with_note(self):
+        from lorcana_mcp.server import build_deck
+        cards, duels = _bd_abundant_pool()
+        duels = [{**d, "legality": ["core_ja"]} for d in duels]
+        with patch("lorcana_mcp.server.fetch_lorcana_json", return_value=cards + [self._preview_card()]), \
+             patch("lorcana_mcp.server.fetch_duels_ink", return_value=duels):
+            result = build_deck("Amber", mode="ideal", format="core_ja", include_preview=True)
+        assert "include_preview applies to Core and Infinity only" in result
+        assert "Amber Preview Star" not in result
+
+
 class TestBuildDeckDualInkRegression:
     def test_dual_ink_card_excluded_when_second_color_outside_pair(self):
         from lorcana_mcp.server import build_deck

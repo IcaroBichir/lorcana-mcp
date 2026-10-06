@@ -60,6 +60,31 @@ def rotation_safe_set_codes(sets_meta: dict) -> set[str]:
     return groups[max(groups)]
 
 
+def preview_set_codes(sets_meta: dict) -> set[str]:
+    """Set codes for announced-but-not-yet-legal sets (e.g. Hyperia City
+    before its release date): not Core-allowed yet, but in a rotation group
+    at or above the newest currently-legal one. The rotationGroup floor is
+    what tells "not legal yet" apart from "already rotated out" — both read
+    allowed=False. Used by build_deck's include_preview flag to admit those
+    cards before duels.ink lists them as legal anywhere."""
+    legal_groups = [
+        core["rotationGroup"]
+        for s in sets_meta.values()
+        if (core := (s.get("allowedInFormats") or {}).get("Core") or {}).get("allowed")
+        and core.get("rotationGroup") is not None
+    ]
+    if not legal_groups:
+        return set()
+    newest = max(legal_groups)
+    codes: set[str] = set()
+    for code, s in sets_meta.items():
+        core = (s.get("allowedInFormats") or {}).get("Core") or {}
+        rg = core.get("rotationGroup")
+        if not core.get("allowed") and rg is not None and rg >= newest:
+            codes.add(str(code))
+    return codes
+
+
 def _color_subset_ok(card: dict, allowed: set[str]) -> bool:
     """A card is eligible for a deck of `allowed` colors only if every color
     on the card is within that set — a Ruby/Emerald dual-ink card must NOT
@@ -76,19 +101,28 @@ def build_candidate_pool(
     duels_lookup: dict | None = None,
     rotation_safe_codes: set[str] | None = None,
     owned_counts: dict[str, int] | None = None,
+    preview_codes: set[str] | None = None,
 ) -> list[dict]:
     """Assemble the legal candidate pool for deck building: dedupe alt-art
     duplicates, restrict to cards whose full color set fits within
     `ink_colors`, restrict to format-legal cards, optionally restrict to a
     rotation-safe set-code allowlist, and optionally (collection mode) drop
     any card owned zero copies. Per-card copy caps are applied later, during
-    allocation — this only decides inclusion."""
+    allocation — this only decides inclusion. Cards from `preview_codes`
+    sets (see preview_set_codes) skip the format check, since no format
+    lists them as legal before release, and always count as rotation-safe —
+    an upcoming set is by construction in the newest rotation group."""
     allowed = {c.strip().lower() for c in ink_colors}
+    preview_codes = preview_codes or set()
     pool = dedupe_by_full_name(lj_cards)
     pool = [c for c in pool if _color_subset_ok(c, allowed)]
-    pool = filter_by_format(pool, fmt, duels_lookup)
+    preview = [c for c in pool if str(c.get("setCode")) in preview_codes]
+    pool = filter_by_format(
+        [c for c in pool if str(c.get("setCode")) not in preview_codes], fmt, duels_lookup,
+    )
     if rotation_safe_codes is not None:
         pool = [c for c in pool if str(c.get("setCode")) in rotation_safe_codes]
+    pool += preview
     if owned_counts is not None:
         pool = [c for c in pool if owned_counts.get((c.get("fullName") or "").lower(), 0) > 0]
     return pool

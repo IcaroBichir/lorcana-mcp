@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import re
+from collections import Counter
 
 from mcp.server.fastmcp import FastMCP
 
@@ -17,7 +18,7 @@ from .api import (
 from .enricher import enrich_csv as _enrich_csv, audit_csv as _audit_csv, _num_int
 from .deck import analyze_deck as _analyze_deck, what_am_i_missing as _what_am_i_missing
 from .deckbuilder import (
-    build_candidate_pool, allocate_deck, rotation_safe_set_codes, summarize_picks,
+    build_candidate_pool, allocate_deck, rotation_safe_set_codes, preview_set_codes, summarize_picks,
     compute_shift_synergy, compute_coconut_synergy, ensure_coconut_associated_card,
 )
 from .meta import format_meta_snapshot
@@ -1306,6 +1307,7 @@ def build_deck(
     collection_csv: str = "",
     rotation_safe: bool = False,
     coconut_card: str = "",
+    include_preview: bool = False,
 ) -> str:
     """
     Automatically assemble a legal, curve-balanced ~60-card decklist for an
@@ -1354,6 +1356,13 @@ def build_deck(
         coconut_card: Required when format="coconut" — fuzzy name of one of
                       the 18 beta Coconut cards (e.g. "Ariel", "Mickey
                       Mouse", "snow white"). Ignored for every other format.
+        include_preview: If True and format is "core" or "infinity", also
+                         admit cards from announced sets that aren't legal
+                         yet (e.g. Hyperia City before its release date) —
+                         whatever LorcanaJSON has revealed so far, which may
+                         be a partial set. Preview cards are marked in the
+                         decklist and usually have no TCGPlayer price yet.
+                         No-op (with a note) for other formats.
     """
     valid_inks = {
         "amber": "Amber", "amethyst": "Amethyst", "emerald": "Emerald",
@@ -1463,11 +1472,39 @@ def build_deck(
         else:
             rotation_note = f"_rotation_safe is a Core-only concept — ignored for {fmt_label}._\n"
 
+    preview_note = ""
+    preview_codes: set[str] = set()
+    if include_preview:
+        if fmt in ("core", "infinity"):
+            try:
+                sets_meta = fetch_lorcana_sets()
+            except Exception as e:
+                return f"Failed to fetch set data: {e}"
+            preview_codes = preview_set_codes(sets_meta)
+            if preview_codes:
+                counts = Counter(str(c.get("setCode")) for c in lj_cards)
+                described = ", ".join(
+                    f"{sets_meta[code].get('name', code)} ({counts.get(code, 0)} cards revealed"
+                    + (f", releases {sets_meta[code]['releaseDate']}" if sets_meta[code].get("releaseDate") else "")
+                    + ")"
+                    for code in sorted(preview_codes, key=lambda x: int(x) if x.isdigit() else 0)
+                    if counts.get(code, 0)
+                )
+                preview_note = (
+                    f"_Preview mode: includes not-yet-legal cards from {described or 'no revealed cards'}. "
+                    "Card pool may be incomplete until release._\n"
+                )
+            else:
+                preview_note = "_include_preview: no upcoming sets found — built from currently legal cards only._\n"
+        else:
+            preview_note = f"_include_preview applies to Core and Infinity only — ignored for {fmt_label}._\n"
+
     pool = build_candidate_pool(
         lj_cards, colors, fmt,
         duels_lookup=duels_lookup,
         rotation_safe_codes=rotation_safe_codes,
         owned_counts=owned_counts if mode == "collection" else None,
+        preview_codes=preview_codes,
     )
 
     if not pool:
@@ -1522,6 +1559,8 @@ def build_deck(
 
     if rotation_note:
         lines.append(rotation_note)
+    if preview_note:
+        lines.append(preview_note)
 
     lines.append(f"### Decklist ({total_cards} cards)")
     lines.append("| Cost | Card | Type | Qty |")
@@ -1530,7 +1569,8 @@ def build_deck(
         ctype = card.get("type", "—")
         if ctype == "Action" and "Song" in (card.get("subtypes") or []):
             ctype = "Action - Song"
-        lines.append(f"| {card.get('cost', '—')} | {card.get('fullName', '—')} | {ctype} | {qty} |")
+        preview_tag = " _(preview)_" if str(card.get("setCode")) in preview_codes else ""
+        lines.append(f"| {card.get('cost', '—')} | {card.get('fullName', '—')}{preview_tag} | {ctype} | {qty} |")
     lines.append("")
 
     lines.append("### duels.ink import")
