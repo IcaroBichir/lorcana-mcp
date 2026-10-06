@@ -1,6 +1,16 @@
 # Changelog
 
-## 2.4.0 — unreleased
+## 2.5.0 — 2026-10-06
+
+Two new `build_deck` parameters.
+
+**`theme` — tribal / character decks.** `build_deck(theme="princess", ink_colors="Ruby,Amber")` builds around a classification (Princess, Detective, Villain, Seven Dwarfs, ... — 49 exist) or a character name (Mickey Mouse, Stitch). Theme members get a +3 score bonus; *payoff* cards whose text references the theme ("your Princess characters get +1 ¤") get another +3, so a tribe and its payoffs land together. Matching is case- and plural-insensitive; payoffs need a whole-word match (Prince ≠ Princess). Omit `ink_colors` and the two-ink pair with the most legal theme cards is chosen for you. The stats section reports how many cards are on-theme and which payoffs made it, and flags thin themes (<20 on-theme cards).
+
+**`include_preview` — build with unreleased sets.** Announced sets that LorcanaJSON lists but no format allows yet (currently **Hyperia City**, releasing 2026-10-23) are admitted into Core/Infinity builds with `include_preview=True`, using whatever cards have been revealed so far. Preview sets are detected from set metadata — Core `allowed=False` but `rotationGroup` at or above the newest legal group, which separates "not legal yet" from "rotated out." Preview cards skip the duels.ink legality check, count as rotation-safe, are tagged _(preview)_ in the decklist table (the import block stays clean), and usually have no TCGPlayer price yet.
+
++18 tests (357 → 375).
+
+## 2.4.0 — 2026-09-14
 
 Metagame snapshot refresh: adds the **Disney Lorcana Challenge — Europe Championship 2026** (Disneyland Paris) to `get_meta`.
 
