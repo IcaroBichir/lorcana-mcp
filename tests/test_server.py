@@ -749,6 +749,51 @@ class TestBuildDeckIncludePreview:
         assert "Amber Preview Star" not in result
 
 
+class TestBuildDeckTheme:
+    def _pool(self):
+        cards, duels = _bd_abundant_pool("Amber")
+        ruby, ruby_duels = _bd_abundant_pool("Ruby", set_code="10")
+        n = 5000
+        for i, color in enumerate(["Ruby", "Ruby", "Ruby", "Amber"]):
+            cards.append(_bd_card(f"{color} Princess {i}", 1 + i % 2, "Character", color, set_code="9", number=n,
+                                  subtypes=["Storyborn", "Princess"], strength=0, willpower=1, lore=1))
+            duels.append(_bd_duels("9", n))
+            n += 1
+        return cards + ruby, duels + ruby_duels
+
+    def test_theme_cards_preferred_and_reported(self):
+        from lorcana_mcp.server import build_deck
+        cards, duels = self._pool()
+        with patch("lorcana_mcp.server.fetch_lorcana_json", return_value=cards), \
+             patch("lorcana_mcp.server.fetch_duels_ink", return_value=duels):
+            result = build_deck("Amber,Ruby", mode="ideal", format="core", theme="princess")
+        for i in range(4):
+            assert f"Princess {i}" in result
+        assert "Theme (Princess): 16/60" in result
+        assert "THIN THEME" in result
+
+    def test_auto_picks_inks_when_omitted(self):
+        from lorcana_mcp.server import build_deck
+        cards, duels = self._pool()
+        with patch("lorcana_mcp.server.fetch_lorcana_json", return_value=cards), \
+             patch("lorcana_mcp.server.fetch_duels_ink", return_value=duels):
+            result = build_deck(mode="ideal", format="core", theme="princess")
+        assert "Inks auto-picked for theme: Amber/Ruby" in result
+        assert "Built deck** — Amber/Ruby" in result
+
+    def test_unknown_theme(self):
+        from lorcana_mcp.server import build_deck
+        cards, duels = self._pool()
+        with patch("lorcana_mcp.server.fetch_lorcana_json", return_value=cards), \
+             patch("lorcana_mcp.server.fetch_duels_ink", return_value=duels):
+            result = build_deck("Amber", mode="ideal", format="core", theme="wizard")
+        assert 'No classification or character name matches theme "wizard"' in result
+
+    def test_no_inks_and_no_theme_still_errors(self):
+        from lorcana_mcp.server import build_deck
+        assert "Provide at least one ink color" in build_deck(mode="ideal", format="core")
+
+
 class TestBuildDeckDualInkRegression:
     def test_dual_ink_card_excluded_when_second_color_outside_pair(self):
         from lorcana_mcp.server import build_deck

@@ -4,6 +4,11 @@ from __future__ import annotations
 from lorcana_mcp.deckbuilder import (
     rotation_safe_set_codes,
     preview_set_codes,
+    resolve_theme,
+    is_theme_member,
+    is_theme_payoff,
+    compute_theme_synergy,
+    best_theme_ink_pair,
     build_candidate_pool,
     score_card,
     character_score,
@@ -105,6 +110,52 @@ class TestPreviewSetCodes:
     def test_empty_when_nothing_legal(self):
         assert preview_set_codes({}) == set()
         assert preview_set_codes({"1": {"allowedInFormats": {"Core": {"allowed": False, "rotationGroup": 1}}}}) == set()
+
+
+# ── theme ───────────────────────────────────────────────────────────────────────
+
+class TestTheme:
+    def _cards(self):
+        return [
+            _card("Aurora - Holding Court", 1, "Character", ["Amber"], subtypes=["Storyborn", "Princess"],
+                  full_text="Whenever this character quests, you pay 1 less for the next Princess character."),
+            _card("Beast - Gracious Prince", 4, "Character", ["Ruby"], subtypes=["Prince"],
+                  full_text="Your Princess characters get +1 ¤ and +1 ⛉."),
+            _card("Mickey Mouse - Detective", 3, "Character", ["Sapphire"], subtypes=["Detective"]),
+            _card("Goofy - Plain", 2, "Character", ["Steel"]),
+        ]
+
+    def test_resolves_classification_case_and_plural_insensitive(self):
+        assert resolve_theme("princesses", self._cards()) == ("subtype", "Princess")
+        assert resolve_theme("DETECTIVE", self._cards()) == ("subtype", "Detective")
+
+    def test_falls_back_to_character_name(self):
+        assert resolve_theme("goofy", self._cards()) == ("name", "goofy")
+
+    def test_unknown_theme(self):
+        assert resolve_theme("wizard", self._cards()) is None
+        assert resolve_theme("  ", self._cards()) is None
+
+    def test_member_vs_payoff(self):
+        aurora, beast, mickey, _ = self._cards()
+        t = ("subtype", "Princess")
+        assert is_theme_member(aurora, t) and is_theme_payoff(aurora, t)
+        assert not is_theme_member(beast, t) and is_theme_payoff(beast, t)
+        assert not is_theme_member(mickey, t) and not is_theme_payoff(mickey, t)
+
+    def test_payoff_needs_whole_word(self):
+        card = _card("X", 2, "Character", ["Amber"], full_text="Chosen Prince gets +1.")
+        assert not is_theme_payoff(card, ("subtype", "Princess"))
+        assert is_theme_payoff(card, ("subtype", "Prince"))
+
+    def test_synergy_bonus_is_additive(self):
+        bonus = compute_theme_synergy(self._cards(), ("subtype", "Princess"))
+        assert bonus["Aurora - Holding Court"] > bonus["Beast - Gracious Prince"] > 0
+        assert "Goofy - Plain" not in bonus
+
+    def test_best_ink_pair(self):
+        colors, n = best_theme_ink_pair(self._cards(), ("subtype", "Princess"))
+        assert colors == ["Amber", "Ruby"] and n == 2
 
 
 # ── build_candidate_pool ─────────────────────────────────────────────────────────

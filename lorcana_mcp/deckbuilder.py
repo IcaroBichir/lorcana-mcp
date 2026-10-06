@@ -462,6 +462,92 @@ def compute_coconut_synergy(pool: list[dict], coconut: dict) -> dict[str, float]
     return bonus
 
 
+# ── Theme (classification / character name) ──────────────────────────────────
+
+# A theme member scores +3 and a theme payoff (card text that references the
+# theme, e.g. "your Princess characters get +1 ¤") another +3. Median card
+# score is ~3, so this lifts even a mediocre member above most unrelated
+# filler without letting a terrible member beat a strong staple outright.
+_THEME_MEMBER_BONUS = 3.0
+_THEME_PAYOFF_BONUS = 3.0
+
+
+def _theme_variants(word: str) -> set[str]:
+    """Lowercased singular/plural spellings to try ("princesses" → also
+    "princess"; "dwarf" → also "dwarfs")."""
+    w = word.strip().lower()
+    out = {w, w + "s", w + "es"}
+    if w.endswith("es"):
+        out.add(w[:-2])
+    if w.endswith("s"):
+        out.add(w[:-1])
+    return out
+
+
+def resolve_theme(theme: str, cards: list[dict]) -> tuple[str, str] | None:
+    """Resolve free-text `theme` to ("subtype", "<Classification>") when it
+    names a classification (Princess, Detective, Seven Dwarfs, ...), else to
+    ("name", "<theme>") when it appears in some card's character name
+    (Mickey Mouse, Stitch, ...). Classification wins on a tie, since it's
+    the more deliberate grouping. None if neither matches anything."""
+    variants = _theme_variants(theme)
+    if not theme.strip():
+        return None
+    for c in cards:
+        for st in c.get("subtypes") or []:
+            if st.lower() in variants:
+                return ("subtype", st)
+    q = theme.strip().lower()
+    if any(q in (c.get("name") or "").lower() for c in cards):
+        return ("name", theme.strip())
+    return None
+
+
+def is_theme_member(card: dict, theme: tuple[str, str]) -> bool:
+    kind, value = theme
+    if kind == "subtype":
+        return value.lower() in [st.lower() for st in (card.get("subtypes") or [])]
+    return value.lower() in (card.get("name") or "").lower()
+
+
+def is_theme_payoff(card: dict, theme: tuple[str, str]) -> bool:
+    """Card text references the theme — the cards that make a tribal deck
+    more than a pile of same-tagged bodies."""
+    _, value = theme
+    text = card.get("fullText") or ""
+    pattern = r"\b(" + "|".join(re.escape(v) for v in sorted(_theme_variants(value), key=len, reverse=True)) + r")\b"
+    return re.search(pattern, text, re.IGNORECASE) is not None
+
+
+def compute_theme_synergy(pool: list[dict], theme: tuple[str, str]) -> dict[str, float]:
+    """Bonus by fullName for theme members and payoffs (additive when a card
+    is both, e.g. a Princess whose ability buffs other Princesses)."""
+    bonus: dict[str, float] = {}
+    for card in pool:
+        fn = card.get("fullName", "")
+        b = (_THEME_MEMBER_BONUS if is_theme_member(card, theme) else 0.0) + \
+            (_THEME_PAYOFF_BONUS if is_theme_payoff(card, theme) else 0.0)
+        if fn and b:
+            bonus[fn] = b
+    return bonus
+
+
+def best_theme_ink_pair(pool: list[dict], theme: tuple[str, str]) -> tuple[list[str], int]:
+    """The two-ink pair holding the most distinct theme members + payoffs in
+    `pool` (an already format-filtered, all-colors pool). Returns
+    (colors, count); ties break alphabetically for determinism."""
+    from itertools import combinations
+    inks = ["Amber", "Amethyst", "Emerald", "Ruby", "Sapphire", "Steel"]
+    relevant = [c for c in pool if is_theme_member(c, theme) or is_theme_payoff(c, theme)]
+    best: tuple[list[str], int] = ([], 0)
+    for pair in combinations(inks, 2):
+        allowed = {p.lower() for p in pair}
+        n = sum(1 for c in relevant if _color_subset_ok(c, allowed))
+        if n > best[1]:
+            best = (list(pair), n)
+    return best
+
+
 # ── Curve targets + allocation ───────────────────────────────────────────────
 
 # Midpoints of the project CLAUDE.md's ink-curve guideline ranges

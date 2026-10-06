@@ -19,6 +19,7 @@ from .enricher import enrich_csv as _enrich_csv, audit_csv as _audit_csv, _num_i
 from .deck import analyze_deck as _analyze_deck, what_am_i_missing as _what_am_i_missing
 from .deckbuilder import (
     build_candidate_pool, allocate_deck, rotation_safe_set_codes, preview_set_codes, summarize_picks,
+    resolve_theme, compute_theme_synergy, best_theme_ink_pair, is_theme_member, is_theme_payoff,
     compute_shift_synergy, compute_coconut_synergy, ensure_coconut_associated_card,
 )
 from .meta import format_meta_snapshot
@@ -1308,6 +1309,7 @@ def build_deck(
     rotation_safe: bool = False,
     coconut_card: str = "",
     include_preview: bool = False,
+    theme: str = "",
 ) -> str:
     """
     Automatically assemble a legal, curve-balanced ~60-card decklist for an
@@ -1363,6 +1365,14 @@ def build_deck(
                          be a partial set. Preview cards are marked in the
                          decklist and usually have no TCGPlayer price yet.
                          No-op (with a note) for other formats.
+        theme: Optional deck theme — a classification ("princess",
+               "detective", "seven dwarfs", "villain", ...) or a character
+               name ("mickey mouse", "stitch"). Cards of that classification/
+               name, and cards whose text references it (payoffs like "your
+               Princess characters get +1 ¤"), are strongly preferred. If
+               ink_colors is omitted, the two-ink pair with the most theme
+               cards in the legal pool is chosen automatically (not for
+               coconut, which needs its Coconut's ink).
     """
     valid_inks = {
         "amber": "Amber", "amethyst": "Amethyst", "emerald": "Emerald",
@@ -1396,8 +1406,9 @@ def build_deck(
         filter_colors = {valid_inks[c] for c in raw_colors} if raw_colors else None
         return _coconut_card_menu(coconut_pool, filter_colors)
 
-    if not raw_colors:
-        return 'Provide at least one ink color, e.g. "Amber,Sapphire".'
+    auto_inks = bool(theme.strip()) and not raw_colors and fmt != "coconut"
+    if not raw_colors and not auto_inks:
+        return 'Provide at least one ink color, e.g. "Amber,Sapphire" (or pass theme to auto-pick).'
     if unknown:
         return f'Unknown ink color(s): {", ".join(unknown)}. Valid: {", ".join(sorted(valid_inks.values()))}.'
 
@@ -1472,6 +1483,32 @@ def build_deck(
         else:
             rotation_note = f"_rotation_safe is a Core-only concept — ignored for {fmt_label}._\n"
 
+    theme_spec: tuple[str, str] | None = None
+    theme_note = ""
+    if theme.strip():
+        theme_spec = resolve_theme(theme, lj_cards)
+        if theme_spec is None:
+            return (
+                f'No classification or character name matches theme "{theme}". Try a '
+                'classification like "Princess", "Detective", "Villain", "Pirate", "Toy", '
+                '"Seven Dwarfs", or a character name like "Mickey Mouse".'
+            )
+        if auto_inks:
+            all_inks = list(valid_inks.values())
+            all_pool = build_candidate_pool(
+                lj_cards, all_inks, fmt, duels_lookup=duels_lookup,
+                rotation_safe_codes=rotation_safe_codes,
+            )
+            picked, n = best_theme_ink_pair(all_pool, theme_spec)
+            if not picked:
+                return f'No {theme_spec[1]} cards are legal in {fmt_label}.'
+            colors = picked
+            colors_display = "/".join(colors)
+            theme_note = (
+                f"_Inks auto-picked for theme: {colors_display} has the most {theme_spec[1]} "
+                f"cards legal in {fmt_label} ({n} distinct)._\n"
+            )
+
     preview_note = ""
     preview_codes: set[str] = set()
     if include_preview:
@@ -1522,6 +1559,9 @@ def build_deck(
 
     max_copies_fn = _max_copies if (mode == "collection" or fmt == "coconut") else None
     synergy_bonus, synergy_info = compute_shift_synergy(pool)
+    if theme_spec is not None:
+        for name, bonus in compute_theme_synergy(pool, theme_spec).items():
+            synergy_bonus[name] = synergy_bonus.get(name, 0.0) + bonus
     if coconut is not None:
         for name, bonus in compute_coconut_synergy(pool, coconut).items():
             synergy_bonus[name] = max(synergy_bonus.get(name, 0.0), bonus)
@@ -1561,6 +1601,8 @@ def build_deck(
         lines.append(rotation_note)
     if preview_note:
         lines.append(preview_note)
+    if theme_note:
+        lines.append(theme_note)
 
     lines.append(f"### Decklist ({total_cards} cards)")
     lines.append("| Cost | Card | Type | Qty |")
@@ -1602,6 +1644,23 @@ def build_deck(
     lines.append(f"- Colors: {', '.join(f'{k} {v}' for k, v in stats['color_counts'].items())}")
     lines.append(f"- Types: {', '.join(f'{k} {v}' for k, v in stats['type_counts'].items())}")
     lines.append(f"- Estimated lore/turn (all questors): {stats['lore_per_turn']}")
+    if theme_spec is not None:
+        label = theme_spec[1]
+        members = sum(q for c, q in sorted_picks if is_theme_member(c, theme_spec))
+        payoffs = [c.get("fullName", "") for c, _ in sorted_picks if is_theme_payoff(c, theme_spec)]
+        lines.append(
+            f"- Theme ({label}): {members}/{total_cards} cards are {label} "
+            f"{'characters' if theme_spec[0] == 'subtype' else 'cards'}"
+            + (f"; payoffs: {', '.join(payoffs)}" if payoffs else "; no payoff cards available")
+        )
+        if members < 20:
+            lines.append(
+                f"- THIN THEME: only {members} {label} cards made the deck — the legal "
+                f"{colors_display} pool doesn't have enough. "
+                + ("This is already the best pair for it — try" if auto_inks
+                   else "Try omitting ink_colors to auto-pick the best pair, or")
+                + " a non-rotating format like infinity."
+            )
 
     format_min_cards = 50 if fmt == "poorcana" else 60
     lines.append(
