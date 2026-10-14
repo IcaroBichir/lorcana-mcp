@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.6.0 — 2026-10-13
 
 **New tool `build_sealed_deck` — Sealed / prerelease deck building.** Built for the Hyperia City prerelease (2026-10-16). Paste an opened pool (6 packs, ~72 cards) — one card per line, by name (informal/misspelled is fine) or by the collector number printed on the card (`123`, `#123`, `123/204`, `123/204 EN 14`) — and get the best 40-card deck back. Collector numbers make photo input reliable: the MCP client reads the image and passes one line per card. Applies the prerelease rules: 40-card minimum, **no ink-color limit**, **no copy limit** (5+ copies of a card you opened are allowed). Ranks all 15 ink pairs by pool depth, builds around the deepest one (or `ink_colors`), and splashes a third/fourth ink only when the core pair can't reach 40 alone — common from 6 packs. Ink is colorless in Lorcana, so a splash costs synergy, not consistency. The output also lists the strongest sideboard cards. Bare names that match several versions ("merlin") are reported as ambiguous with candidates and their collector numbers — never guessed. Name matching is scoped to `set_name` (default Hyperia City) first, then the whole pool, so promos and older cards still resolve. Logic lives in the new `lorcana_mcp/sealed.py`. `allocate_deck` gains a `per_card_max` parameter (default 4, unchanged for Constructed) so Sealed can go past 4 copies.
 
