@@ -18,7 +18,7 @@ def test_all_tools_registered():
     assert names == {
         "enrich_csv", "lookup_card", "resolve_card", "list_printings", "search_cards",
         "find_song_synergies", "filter_collection", "audit_csv", "analyze_deck",
-        "what_am_i_missing", "build_deck", "get_meta",
+        "what_am_i_missing", "build_deck", "build_sealed_deck", "get_meta",
     }
 
 

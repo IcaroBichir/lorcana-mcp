@@ -22,6 +22,11 @@ from .deckbuilder import (
     resolve_theme, compute_theme_synergy, best_theme_ink_pair, is_theme_member, is_theme_payoff,
     compute_shift_synergy, compute_coconut_synergy, ensure_coconut_associated_card,
 )
+from .sealed import (
+    INK_COLORS as SEALED_INKS, SEALED_DECK_SIZE, resolve_pool as resolve_sealed_pool,
+    build_sealed_deck as _build_sealed_deck, card_colors_label as sealed_colors_label,
+    _color_subset_ok as _sealed_subset,
+)
 from .meta import format_meta_snapshot
 from .update_check import startup_stderr_notice, get_meta_notice
 
@@ -37,6 +42,9 @@ mcp = FastMCP(
         "check a deck list against your collection for what's missing and its cost to complete, "
         "or automatically build a legal decklist for an ink pair/format from your collection, "
         "an ideal deck priced to complete, or the full market-price build. "
+        "For prerelease/Sealed events, build_sealed_deck turns an opened card pool "
+        "(a typed list, or card names/collector numbers read from a photo) into the "
+        "best 40-card deck. "
         "Also available: a hand-maintained Core Constructed metagame snapshot (tier list "
         "plus recent tournament results) for players asking what's currently strong."
     ),
@@ -1782,6 +1790,177 @@ def build_deck(
     lines.append(_BUILD_DECK_DISCLAIMER)
 
     return "\n".join(lines)
+
+
+@mcp.tool()
+def build_sealed_deck(pool: str, ink_colors: str = "", set_name: str = "Hyperia City") -> str:
+    """
+    Build the best 40-card Sealed (prerelease) deck from a player's opened
+    card pool — for prerelease events, where everyone opens 6 booster packs
+    (~72 cards) on-site and has ~45 minutes to build.
+
+    Sealed rules applied: 40-card minimum; NO ink-color limit; NO copy limit
+    (every copy you opened is playable, even 5+); the stamped prerelease
+    promo is allowed; unused cards are the sideboard (swappable between
+    games). No format-legality or rotation check — the set doesn't need to
+    be released yet.
+
+    Strategy: ranks every two-ink pair by pool depth and builds around the
+    best one (or `ink_colors`), splashing a third/fourth ink only when the
+    core pair can't reach 40 on its own — common from 6 packs. Ink is
+    colorless in Lorcana, so a splash costs synergy, not consistency.
+
+    Input — `pool` is one card per line, quantity optional ("2x Card Name",
+    "2 Card Name", or just "Card Name"; repeats are summed). Each line can be:
+      - a card name, informal or misspelled is fine ("mickey best in town");
+      - the collector number printed at the card's bottom ("123", "123/204",
+        "123/204 EN 14") — matched within `set_name`.
+
+    If the user sends a PHOTO of their pool: read every visible card from the
+    image and pass one line per card. Prefer the collector number when it's
+    legible (most reliable); otherwise the name + subtitle. Count duplicates.
+    Then tell the user which cards came back ambiguous/unrecognized so they
+    can confirm, and re-call with corrected lines.
+
+    Output: ink-pair ranking, the 40-card list by cost, splash notes, stats
+    (curve, inkable count, lore), the strongest sideboard cards, and any
+    ambiguous/unrecognized lines (excluded from the build — never guessed).
+    Heuristic curve/keyword-value scoring with Shift-chain awareness, not a
+    full synergy engine: review the list before sleeving it.
+
+    Args:
+        pool: The opened cards, one per line (names and/or collector numbers).
+        ink_colors: Optional comma-separated core inks to force, e.g.
+                    "Amber,Steel" (any number allowed in Sealed). Empty =
+                    auto-pick the deepest pair.
+        set_name: The prerelease set, used to scope name matching and to
+                  read collector numbers. Default "Hyperia City" (Set 14).
+    """
+    valid_inks = {c.lower(): c for c in SEALED_INKS}
+    raw_colors = [c.strip().lower() for c in ink_colors.split(",") if c.strip()]
+    unknown = [c for c in raw_colors if c not in valid_inks]
+    if unknown:
+        return f'Unknown ink color(s): {", ".join(unknown)}. Valid: {", ".join(SEALED_INKS)}.'
+
+    set_code = SETNAME_TO_LJCODE.get(set_name) if set_name else None
+    if set_name and set_code is None:
+        set_code = next(
+            (code for name, code in SETNAME_TO_LJCODE.items() if set_name.lower() in name.lower()), None
+        )
+        if set_code is None:
+            return f'Unknown set "{set_name}". Pass e.g. "Hyperia City" or leave empty to search every set.'
+
+    try:
+        lj_cards = fetch_lorcana_json()
+    except Exception as e:
+        return f"Failed to fetch card data: {e}"
+
+    resolved = resolve_sealed_pool(pool, lj_cards, set_code)
+    card_pool = resolved["pool"]
+    pool_total = sum(q for _, q in card_pool)
+    if pool_total == 0:
+        msg = "No cards recognized in the pool. Expected one card per line, e.g. \"2x Mickey Mouse - Best in Town\" or \"123/204\"."
+        return msg + _sealed_problem_lines(resolved)
+
+    result = _build_sealed_deck(card_pool, [valid_inks[c] for c in raw_colors] or None)
+    picks = sorted(result["picks"], key=lambda cq: (cq[0].get("cost") or 0, cq[0].get("fullName", "")))
+    total = result["total"]
+    inks_label = "/".join(result["core"])
+
+    lines = [f"## Sealed deck — {inks_label}" + (f" + {'/'.join(result['splashes'])} splash" if result["splashes"] else "")]
+    lines.append(
+        f"_Pool: {pool_total} cards resolved. Sealed rules: 40-card minimum, no ink limit, "
+        "no copy limit; everything not in the deck is your sideboard._\n"
+    )
+
+    lines.append("### Ink pairs by pool depth")
+    lines.append("| Pair | Playables | Strength |")
+    lines.append("|------|-----------|----------|")
+    for row in result["pair_ranking"][:5]:
+        lines.append(f"| {'/'.join(row['colors'])} | {row['playables']} | {row['strength']} |")
+    lines.append("")
+
+    if result["splashes"]:
+        core_count = sum(q for c, q in card_pool if _sealed_subset(c, set(result["core"])))
+        lines.append(
+            f"_{inks_label} has only {core_count} playable cards in your pool, so "
+            f"{'/'.join(result['splashes'])} fills the rest. Ink is colorless in Lorcana — "
+            "a splash costs synergy, not consistency._\n"
+        )
+
+    if total < SEALED_DECK_SIZE:
+        lines.append(
+            f"**SHORT: only {total} cards available — the pool is under {SEALED_DECK_SIZE}. "
+            "Check the ambiguous/unrecognized lines below.**\n"
+        )
+
+    lines.append(f"### Decklist ({total} cards)")
+    lines.append("| Cost | Card | Ink | Type | Qty |")
+    lines.append("|------|------|-----|------|-----|")
+    for card, qty in picks:
+        ctype = card.get("type", "—")
+        if ctype == "Action" and "Song" in (card.get("subtypes") or []):
+            ctype = "Action - Song"
+        ink_tag = "" if card.get("inkwell") else " ⊘"
+        lines.append(
+            f"| {card.get('cost', '—')} | {card.get('fullName', '—')}{ink_tag} | "
+            f"{sealed_colors_label(card)} | {ctype} | {qty} |"
+        )
+    lines.append("_⊘ = uninkable_\n")
+
+    stats = summarize_picks(picks)
+    curve = stats["curve"]
+    lines.append("### Stats")
+    lines.append(
+        f"- Curve: 1-2⬡ {curve['1-2']} · 3-4⬡ {curve['3-4']} · "
+        f"5-6⬡ {curve['5-6']} · 7+⬡ {curve['7+']}"
+    )
+    lines.append(f"- Inkable: {stats['inkable_count']} · Uninkable: {stats['uninkable_count']}")
+    if total and stats["uninkable_count"] > 12:
+        lines.append(
+            f"- HEAVY ON UNINKABLES ({stats['uninkable_count']}) — risk of missing ink drops; "
+            "consider swapping a weak uninkable for an inkable sideboard card."
+        )
+    lines.append(f"- Types: {', '.join(f'{k} {v}' for k, v in stats['type_counts'].items())}")
+    lines.append(f"- Estimated lore/turn (all questors): {stats['lore_per_turn']}")
+
+    picked_names = {c.get("fullName") for c, _ in picks}
+    sideboard = result["sideboard"][:8]
+    if sideboard:
+        lines.append("\n### Best sideboard cards")
+        for card, qty in sideboard:
+            note = "" if card.get("fullName") not in picked_names else " (extra copy)"
+            lines.append(
+                f"- {qty}x {card.get('fullName', '—')} — {sealed_colors_label(card)}, "
+                f"{card.get('cost', '—')}⬡{note}"
+            )
+
+    lines.append("\n### Plain list")
+    lines.append("```")
+    lines.extend(f"{qty}x {card.get('fullName', '')}" for card, qty in picks)
+    lines.append("```")
+
+    lines.append(_sealed_problem_lines(resolved))
+    lines.append(
+        "\n_Heuristic curve/keyword-value builder with Shift-chain awareness — not a "
+        "synergy engine. Review removal, Evasive answers, and tribal payoffs before sleeving._"
+    )
+    return "\n".join(line for line in lines if line is not None)
+
+
+def _sealed_problem_lines(resolved: dict) -> str:
+    out = []
+    if resolved["ambiguous"]:
+        out.append("\n### Ambiguous — not included (re-send with the full name or collector number)")
+        for line, qty, cands in resolved["ambiguous"]:
+            names = "; ".join(
+                f"{c.get('fullName', '—')} (#{c.get('number', '?')})" for c in cands
+            )
+            out.append(f"- {qty}x \"{line}\" → {names}")
+    if resolved["unresolved"]:
+        out.append("\n### Unrecognized — not included")
+        out.extend(f"- {qty}x \"{line}\"" for line, qty in resolved["unresolved"])
+    return "\n".join(out)
 
 
 def _duels_lookup_card(lj_card: dict) -> dict | None:

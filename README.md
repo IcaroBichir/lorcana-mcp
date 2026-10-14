@@ -51,7 +51,7 @@ That's it — Claude does the rest. Everything below is reference detail for whe
 
 ## Tools
 
-Twelve tools are available in Claude once the server is running:
+Thirteen tools are available in Claude once the server is running:
 
 | Tool                  | What it does |
 |-----------------------|---|
@@ -66,6 +66,7 @@ Twelve tools are available in Claude once the server is running:
 | `analyze_deck`        | Analyzes a raw deck list (`4x Card Name` per line) for ink curve, inkable split, color split, card types, estimated lore/turn, and Core Constructed legality (60-card min, max 4 copies, ≤2 ink colors). |
 | `what_am_i_missing`   | Compares a deck list against your collection: what you already own, what's missing or short, and a live TCGPlayer cost estimate (via tcgcsv.com) to complete it. |
 | `build_deck`          | Automatically assembles a legal, curve-balanced ~60-card decklist for an ink pair/format, in one of 3 modes: `collection` (only cards you own), `ideal` (best deck regardless of ownership, priced to complete if you pass a collection CSV), or `market` (best deck, fully priced, ignoring ownership). Also builds for `format="coconut"` — Ravensburger's multiplayer singleton beta (up to 3 ink colors, 1 copy of everything except your chosen Coconut's associated character at up to 4). Pass `theme` (a classification like `"princess"`/`"detective"`, or a character name) to build a tribal deck — inks are auto-picked if you omit them — and `include_preview=True` to use cards from an announced set before it's legal. A heuristic curve/keyword-value builder, not a synergy/combo detector. |
+| `build_sealed_deck`   | Builds the best 40-card **Sealed / prerelease** deck from an opened card pool (6 packs, ~72 cards). Takes one card per line — names (informal/misspelled is fine) or the collector numbers printed on the cards (`123`, `123/204`), so a photo of the pool can be transcribed by your MCP client and passed straight in. Sealed rules: 40-card minimum, no ink limit, no copy limit. Ranks every ink pair by pool depth, builds around the deepest one, splashes extra inks only when needed to reach 40, and lists the best sideboard cards plus any ambiguous/unrecognized lines (never guessed). |
 | `get_meta`            | Returns a hand-maintained Core Constructed metagame snapshot: every two-ink pair's tier, rough meta share, and playstyle, plus recent tournament results — optionally filtered to one pair (`ink_colors="Emerald,Steel"`). With `event=` ("nac", "asia", "kobe", …) returns that tournament's full standings and decklists instead. Not a live fetch — there's no free structured feed for this the way there is for card data — so it's a versioned snapshot bundled at release time, and says so explicitly in its own output. |
 
 ---
@@ -379,6 +380,7 @@ If you're an AI agent (Claude or otherwise) with this MCP server connected, read
 | "What do I need to buy to finish this deck, and how much?" | `what_am_i_missing` | — |
 | "Build me a [princess / detective / Stitch] deck" | `build_deck(theme=...)` — omit `ink_colors` to auto-pick the best pair, or pass the user's inks | filtering `search_cards` by subtype and assembling by hand |
 | "Build me a deck for [ink pair]" | `build_deck` — ask which of the 3 modes (`collection`/`ideal`/`market`) first if the user hasn't said | manually assembling a decklist from `search_cards` results |
+| "Here's my prerelease / sealed pool" (a list or a photo of opened cards) | `build_sealed_deck` — for a photo, read each card's collector number (or name) into one line per card, then confirm any ambiguous/unrecognized lines with the user | `build_deck` (Constructed rules: 60 cards, 4-copy limit, 2 inks) |
 
 ### Hard rules
 
@@ -399,7 +401,7 @@ If you're an AI agent (Claude or otherwise) with this MCP server connected, read
 ### If you're modifying this codebase
 
 - Run `pytest` before and after any change — 355 tests, all network-free (external calls are mocked; `tests/conftest.py` also disables the PyPI update check).
-- Code layout: pure/testable logic lives in `api.py` (card data + fuzzy matching + pricing), `deck.py` (deck list parsing/analysis), `enricher.py` (CSV pipeline), `meta.py` + `tournaments.py` (bundled metagame/tournament snapshot), and `update_check.py` (PyPI version check). `server.py` only wraps those as MCP tools and formats output — keep it that way rather than putting logic directly in tool functions. `lorcana_mcp/data/allcards_fallback.json.gz` is the offline card-data fallback (refresh with `scripts/update_fallback_snapshot.py`).
+- Code layout: pure/testable logic lives in `api.py` (card data + fuzzy matching + pricing), `deck.py` (deck list parsing/analysis), `deckbuilder.py` (Constructed deck synthesis), `sealed.py` (Sealed pool resolution + 40-card builds), `enricher.py` (CSV pipeline), `meta.py` + `tournaments.py` (bundled metagame/tournament snapshot), and `update_check.py` (PyPI version check). `server.py` only wraps those as MCP tools and formats output — keep it that way rather than putting logic directly in tool functions. `lorcana_mcp/data/allcards_fallback.json.gz` is the offline card-data fallback (refresh with `scripts/update_fallback_snapshot.py`).
 - A release bumps the version in **four files** (`pyproject.toml`, `server.json`, `packaging/mcpb/pyproject.toml` — both its `version` and the `lorcana-mcp==` pin — and `packaging/mcpb/manifest.json`), adds a `CHANGELOG.md` entry, and updates this README + `docs/INSTALL.md` if tool behavior changed. Check `git log` for the `chore: release X.Y.Z` pattern.
 - Publishing is a separate, explicit step (`python -m build`, `twine upload`, `mcp-publisher publish`) — never assume a version bump in `pyproject.toml` means it's live on PyPI or the registry. Check before telling a user a feature is "available."
 

@@ -300,6 +300,7 @@ KEYWORD_PATTERNS = [
     (r"\bReckless\b",            "Reckless"),
     (r"\bVanish\b",              "Vanish"),
     (r"\bAlert\b",               "Alert"),
+    (r"\bAdventurous\b",         "Adventurous"),
     (r"\bShift\s+(\d+)",         "Shift"),
     (r"\bChallenger\s+\+(\d+)", "Challenger"),
     (r"\bResist\s+\+(\d+)",      "Resist"),

@@ -133,14 +133,18 @@ def build_candidate_pool(
 # Ward and Evasive are the two strongest keywords per the project CLAUDE.md's
 # own keyword glossary ("Considered the strongest defensive keyword" /
 # "Core lore engine ... nearly untouchable"); everything else with real but
-# smaller value gets a flat mid-tier bonus. Reckless is a real drawback
-# (forced to challenge, can't quest) so it scores negative.
+# smaller value gets a flat mid-tier bonus. Alert (Set 14 — "can challenge
+# as if they had Evasive") sits above that tier: it's one of the few answers
+# to an Evasive board. Reckless is a real drawback (forced to challenge,
+# can't quest) so it scores negative; Adventurous (Set 14 — can't challenge,
+# must quest if able) is a milder version of the same, since questing is
+# usually what you wanted the character to do anyway.
 _KEYWORD_SCORE: dict[str, float] = {
     "ward": 3.0, "evasive": 3.0,
     "rush": 1.5, "bodyguard": 1.5, "resist": 1.5,
     "challenger": 1.5, "support": 1.5, "singer": 1.5, "shift": 1.5,
-    "vanish": 1.0, "alert": 1.0,
-    "reckless": -0.5,
+    "alert": 2.0, "vanish": 1.0,
+    "reckless": -0.5, "adventurous": -0.25,
 }
 
 # Rough ability-text value signals for non-character cards, since there's no
@@ -593,6 +597,7 @@ def allocate_deck(
     max_copies_fn: Callable[[dict], int] | None = None,
     synergy_bonus: dict[str, float] | None = None,
     synergy_info: list[dict] | None = None,
+    per_card_max: int = 4,
 ) -> list[tuple[dict, int]]:
     """Greedily fill each cost bucket toward its target with the highest-
     scoring cards, respecting `max_copies_fn` (default: always up to 4) and
@@ -615,6 +620,11 @@ def allocate_deck(
     guarantee pass over "all"-relation synergies (Duo Shift) only — see
     `_enforce_all_relation_synergies` for why the bonus alone isn't
     sufficient there.
+
+    `per_card_max` is the most copies of one card a single take can add —
+    the Constructed 4-copy rule by default. Sealed has no copy limit, so
+    `sealed.build_sealed_deck` raises it and lets `max_copies_fn` (the
+    opened quantity) be the only cap.
     """
     if targets is None:
         targets = curve_targets()
@@ -667,7 +677,7 @@ def allocate_deck(
         for card in cards:
             if need <= 0:
                 break
-            need -= try_take(card, min(4, need), enforce_type_cap=True)
+            need -= try_take(card, min(per_card_max, need), enforce_type_cap=True)
 
     # Backfill pass: whatever's left in the pool, ignoring bucket targets
     # AND the type caps (which sum to less than a full deck by design — see
@@ -681,7 +691,7 @@ def allocate_deck(
         for card in ranked:
             if grand_total >= total:
                 break
-            try_take(card, min(4, total - grand_total), enforce_type_cap=False)
+            try_take(card, min(per_card_max, total - grand_total), enforce_type_cap=False)
 
     if synergy_info:
         picks = _enforce_all_relation_synergies(picks, ranked, max_copies_fn, synergy_info)
