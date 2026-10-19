@@ -162,6 +162,14 @@ class TestBuildLjLookup:
         cards = [{"setCode": "x", "number": "not_a_number"}]
         assert build_lj_lookup(cards) == {}
 
+    def test_null_number_skipped(self):
+        # LorcanaJSON ships token-like entries (e.g. Vine Tendril, set Q3) with number: null
+        cards = [
+            {"setCode": "Q3", "number": None, "fullName": "Vine Tendril"},
+            {"setCode": 14, "number": 104, "fullName": "Abby Park - Intense Fan"},
+        ]
+        assert list(build_lj_lookup(cards)) == [("14", 104)]
+
 
 # ── build_duels_lookup ─────────────────────────────────────────────────────────
 
@@ -234,6 +242,28 @@ def test_enrich_from_lj_action_has_blank_stats():
     assert strength == ""
     assert willpower == ""
     assert lore == ""
+
+
+def test_enrich_from_lj_action_text_from_effects():
+    # Non-song actions carry their text only in `effects` (abilities is null)
+    card = {
+        "color": "Ruby", "cost": 3, "type": "Action", "inkwell": True,
+        "abilities": None,
+        "effects": ["Deal 3 damage to chosen character. If that character\nhas damage, deal 5 damage instead."],
+    }
+    abilities = enrich_from_lj(card)[9]
+    assert abilities == "Deal 3 damage to chosen character. If that character | has damage, deal 5 damage instead."
+
+
+def test_enrich_from_lj_song_keeps_reminder_and_effect():
+    card = {
+        "color": "Amethyst", "cost": 3, "type": "Action", "subtypes": ["Song"], "inkwell": True,
+        "abilities": [{"type": "static", "fullText": "(A character with cost 3 or more can ⟳ to sing this\nsong for free.)"}],
+        "effects": ["Put 1 damage counter on each opposing character."],
+    }
+    abilities = enrich_from_lj(card)[9]
+    assert abilities.startswith("(A character with cost 3 or more")
+    assert abilities.endswith("Put 1 damage counter on each opposing character.")
 
 
 # ── enrich_from_api ────────────────────────────────────────────────────────────

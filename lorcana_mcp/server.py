@@ -7,7 +7,7 @@ from collections import Counter
 from mcp.server.fastmcp import FastMCP
 
 from .api import (
-    search_card, abilities_from_lj, LJCODE_TO_SETNAME, SETNAME_TO_LJCODE,
+    search_card, card_text_from_lj, LJCODE_TO_SETNAME, SETNAME_TO_LJCODE,
     fetch_duels_ink, build_duels_lookup, DUELS_FORMAT_LABELS, lj_card_format_legal,
     fetch_lorcana_json, fetch_lorcana_sets, filter_cards, filter_by_format,
     _card_colors, resolve_card as _resolve_card,
@@ -249,7 +249,7 @@ def enrich_csv(input_path: str, cache_path: str = "", refresh_prices: bool = Fal
 def _format_card_detail(card: dict) -> str:
     """Full stats/abilities/legality block for a single resolved card."""
     set_display = LJCODE_TO_SETNAME.get(str(card.get("setCode")), f"Set {card.get('setCode')}")
-    abilities_text = abilities_from_lj(card.get("abilities", []))
+    abilities_text = card_text_from_lj(card)
 
     keywords = []
     for ab in card.get("abilities", []):

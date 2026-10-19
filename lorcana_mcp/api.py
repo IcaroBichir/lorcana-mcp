@@ -349,6 +349,18 @@ def abilities_from_lj(abilities: list) -> str:
                 parts.append(line.strip())
     return " | ".join(parts)
 
+
+def card_text_from_lj(card: dict) -> str:
+    """Full rules text for a LorcanaJSON card: its abilities plus `effects`.
+
+    LorcanaJSON keeps an Action's (and a Song's) effect text in `effects`, not
+    `abilities` — a song's `abilities` holds only the "can ⟳ to sing" reminder.
+    """
+    parts = [abilities_from_lj(card.get("abilities") or [])]
+    for effect in card.get("effects") or []:
+        parts.extend(line.strip() for line in effect.split("\n") if line.strip())
+    return " | ".join(p for p in parts if p)
+
 # ── Card selection ─────────────────────────────────────────────────────────────
 
 def pick_lj_card(candidates: list, product_name: str) -> dict | None:
@@ -389,7 +401,7 @@ def enrich_from_api(c: dict) -> tuple:
 
 
 def enrich_from_lj(c: dict) -> tuple:
-    abs_list = c.get("abilities", [])
+    abs_list = c.get("abilities") or []
     return (
         c.get("color", ""),
         str(c["cost"]) if c.get("cost", "") != "" else "",
@@ -400,7 +412,7 @@ def enrich_from_lj(c: dict) -> tuple:
         str(c["lore"]) if c.get("lore", "") != "" else "",
         "Yes" if c.get("inkwell") else "No",
         extract_keywords_from_lj_abilities(abs_list),
-        abilities_from_lj(abs_list),
+        card_text_from_lj(c),
     )
 
 # ── API fetch + lookup builders ────────────────────────────────────────────────
@@ -495,7 +507,7 @@ def build_lj_lookup(cards: list[dict]) -> dict:
         try:
             key = (str(c["setCode"]), int(c["number"]))
             lookup.setdefault(key, []).append(c)
-        except (KeyError, ValueError):
+        except (KeyError, TypeError, ValueError):
             continue
     return lookup
 
