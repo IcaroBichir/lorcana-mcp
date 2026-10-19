@@ -196,13 +196,13 @@ class TestBuildDreambornRows:
             "Number": "4",
             "Printing": "Holofoil",
             "Add to Quantity": "1",
-            "Product Name": "Maleficent - Exultant Spellcaster",
+            "Product Name": "Maleficent - Not A Real Promo",
             "Ink": "Amethyst",
         }]
         result = _build_dreamborn_rows(rows)
         assert result["rows"] == []
         assert len(result["promos"]) == 1
-        assert result["promos"][0]["name"] == "Maleficent - Exultant Spellcaster"
+        assert result["promos"][0]["name"] == "Maleficent - Not A Real Promo"
 
 
 # ── enrich_csv — refresh_prices ─────────────────────────────────────────────────
