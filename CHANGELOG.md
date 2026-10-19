@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.6.1 — 2026-10-18
+
+Bug fixes and promo data. No new tools.
+
+**`enrich_csv` crashed on every run.** LorcanaJSON added a token-like entry (Vine Tendril, set Q3) with `number: null`, and `build_lj_lookup` only caught `KeyError`/`ValueError`, so `int(None)` raised `TypeError` and every enrichment failed with "int() argument must be a string...". Entries with no number are now skipped.
+
+**Action and Song text was blank.** LorcanaJSON keeps an Action's effect text in `effects`, not `abilities`, and a Song's `abilities` holds only the "can ⟳ to sing this song for free" reminder. We only read `abilities`, so about 470 cards across all sets (every non-song Action, and every Song past its reminder line) came back blank or reminder-only in the enriched CSV's Abilities column and in `lookup_card`. Earlier notes put this down to missing upstream data, but the text was always in LorcanaJSON. The new `card_text_from_lj()` appends `effects` after the ability lines. **Re-run `enrich_csv` without `cache_path` on older enriched CSVs.** A cache would carry the blank text forward.
+
+**16 promos now resolve to dreamborn.ink rows.** From dreamborn card pages: all the Hyperia City (Set 14) promos. PD1: Merlin - Ink Drop Tinkerer 10, Above the Crowd 11, Goofy - Dancing Superstar 12, Judy Hopps - Day Camp Instructor 13, Berlioz - Tiny Rascal 14, The Beanstalk - Onward and Upward 17, Nick Wilde - Inquisitive Harbormaster 9. RPH: Everyone Knows Juanita 1, Tramp - Quick on His Feet 2, Arthur - Novice Blacksmith 3, Minnie Mouse - Urban Visionary 4, Nick Wilde - Providing Backup 5, and Honey Lemon - Testing the Limits 6 (Normal) / 7 (Foil), told apart by TCGPlayer promo number. D23: Hector Rivera - Gone to Pieces 13. Also the long-standing holdout **Maleficent - Exultant Spellcaster**, which dreamborn files as `4/DIS` (Set 13), not under PD1/P4.
+
+**Offline snapshot refreshed** to LorcanaJSON's 2026-10-16 data (3556 cards).
+
++3 tests (394 → 397).
+
 ## 2.6.0 — 2026-10-13
 
 **New tool `build_sealed_deck` — Sealed / prerelease deck building.** Built for the Hyperia City prerelease (2026-10-16). Paste an opened pool (6 packs, ~72 cards) — one card per line, by name (informal/misspelled is fine) or by the collector number printed on the card (`123`, `#123`, `123/204`, `123/204 EN 14`) — and get the best 40-card deck back. Collector numbers make photo input reliable: the MCP client reads the image and passes one line per card. Applies the prerelease rules: 40-card minimum, **no ink-color limit**, **no copy limit** (5+ copies of a card you opened are allowed). Ranks all 15 ink pairs by pool depth, builds around the deepest one (or `ink_colors`), and splashes a third/fourth ink only when the core pair can't reach 40 alone — common from 6 packs. Ink is colorless in Lorcana, so a splash costs synergy, not consistency. The output also lists the strongest sideboard cards. Bare names that match several versions ("merlin") are reported as ambiguous with candidates and their collector numbers — never guessed. Name matching is scoped to `set_name` (default Hyperia City) first, then the whole pool, so promos and older cards still resolve. Logic lives in the new `lorcana_mcp/sealed.py`. `allocate_deck` gains a `per_card_max` parameter (default 4, unchanged for Constructed) so Sealed can go past 4 copies.
