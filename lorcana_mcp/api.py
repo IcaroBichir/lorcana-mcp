@@ -624,6 +624,57 @@ DUELS_FORMAT_LABELS: dict[str, str] = {
 }
 
 
+# Official Ravensburger ban list, hand-maintained. Keys are format ids,
+# values are card full names ("Name - Subtitle", or the bare name for
+# Actions/Items). A ban covers every printing of that name, so it is matched
+# on name, not (set, number). This list is applied *on top of* duels.ink's
+# per-card legality. That protects against duels.ink lagging behind an
+# announcement or a stale 24h cache. It also covers Format Coconut, which
+# duels.ink doesn't track at all. Source: "Disney Lorcana TCG Ban List as of
+# Tuesday, Nov 3, 2026" (disneylorcana.com/en/news/2026/11/
+# update-to-core-constructed-format-and-format-coconut/).
+BAN_LIST_DATE = "2026-11-03"
+BANNED_CARDS: dict[str, frozenset[str]] = {
+    "core":     frozenset({"My Adventure Book"}),
+    "infinity": frozenset({"Hiram Flaversham - Toymaker"}),
+    "coconut":  frozenset({"Bend to My Will"}),
+}
+
+
+def _ban_key(name: str) -> str:
+    """Normalize a card name for ban matching: en/em dash → hyphen, collapse
+    whitespace, casefold, and drop a TCGPlayer-style trailing " (...)" promo
+    suffix."""
+    n = re.sub(r"\s*\([^)]*\)\s*$", "", name or "")
+    n = n.replace("–", "-").replace("—", "-")
+    return " ".join(n.split()).casefold()
+
+
+_BANNED_KEYS: dict[str, frozenset[str]] = {
+    fmt: frozenset(_ban_key(n) for n in names) for fmt, names in BANNED_CARDS.items()
+}
+
+
+def card_full_name(card: dict) -> str:
+    """LorcanaJSON card → "Name - Version" (or bare name)."""
+    full = card.get("fullName")
+    if full:
+        return full
+    name, version = card.get("name", ""), card.get("version")
+    return f"{name} - {version}" if version else name
+
+
+def is_banned(name: str, fmt: str) -> bool:
+    """True if a card (by full name) is on the official ban list for fmt."""
+    return _ban_key(name) in _BANNED_KEYS.get(fmt, frozenset())
+
+
+def banned_formats(name: str) -> list[str]:
+    """Format ids in which the named card is banned (empty if none)."""
+    key = _ban_key(name)
+    return [fmt for fmt, keys in _BANNED_KEYS.items() if key in keys]
+
+
 def lj_card_format_legal(card: dict, fmt: str, duels_lookup: dict) -> bool:
     """True if a LorcanaJSON card is legal in the given format.
 
@@ -638,7 +689,12 @@ def lj_card_format_legal(card: dict, fmt: str, duels_lookup: dict) -> bool:
     duels.ink's `legality` list by (setCode, number), the same check
     filter_collection already applies per collection-CSV row, applied here
     directly to LJ cards (which already carry setCode/number natively).
+
+    Cards on BANNED_CARDS for the format are never legal, whatever duels.ink
+    says (and this is the only ban check Coconut gets).
     """
+    if is_banned(card_full_name(card), fmt):
+        return False
     if fmt == "poorcana":
         return (card.get("rarity") or "").strip() in ("Common", "Uncommon")
     if fmt == "coconut":

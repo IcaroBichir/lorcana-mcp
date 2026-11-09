@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from .api import search_card, _card_colors
+from .api import search_card, _card_colors, card_full_name, is_banned
 
 _LINE_RE = re.compile(r"^(\d+)\s*[xX]?\s+(.+?)\s*$")
 _COST_BRACKETS = [(1, 2, "1-2"), (3, 4, "3-4"), (5, 6, "5-6"), (7, None, "7+")]
@@ -87,6 +87,7 @@ def analyze_deck(deck_text: str) -> dict:
     unresolved: list[dict] = []
     entries: list[dict] = []
     all_colors: set[str] = set()
+    banned: list[str] = []
 
     for key, qty in combined.items():
         raw_name = name_by_key[key]
@@ -98,6 +99,9 @@ def analyze_deck(deck_text: str) -> dict:
         if not card:
             unresolved.append({"name": raw_name, "qty": qty})
             continue
+
+        if is_banned(card_full_name(card), "core"):
+            banned.append(card_full_name(card))
 
         cost = card.get("cost")
         inkwell = bool(card.get("inkwell"))
@@ -136,6 +140,8 @@ def analyze_deck(deck_text: str) -> dict:
         "over_limit_cards": over_limit,
         "two_ink_colors_or_fewer": len(all_colors) <= 2,
         "ink_colors_used": sorted(all_colors),
+        "no_banned_cards": not banned,
+        "banned_cards": banned,
     }
 
     return {

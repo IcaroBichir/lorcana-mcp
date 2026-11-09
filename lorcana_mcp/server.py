@@ -14,6 +14,7 @@ from .api import (
     singer_value, is_song, find_song_singers,
     fetch_tcgcsv_prices, cheapest_price_for_card,
     fetch_format_coconut_cards, resolve_coconut_card,
+    is_banned, banned_formats, card_full_name, BAN_LIST_DATE,
 )
 from .enricher import enrich_csv as _enrich_csv, audit_csv as _audit_csv, _num_int
 from .deck import analyze_deck as _analyze_deck, what_am_i_missing as _what_am_i_missing
@@ -246,6 +247,14 @@ def enrich_csv(input_path: str, cache_path: str = "", refresh_prices: bool = Fal
     )
 
 
+_BAN_FORMAT_LABELS = {"core": "Core Constructed", "infinity": "Infinity Constructed",
+                      "coconut": "Format Coconut"}
+
+
+def _ban_format_label(fmt: str) -> str:
+    return _BAN_FORMAT_LABELS.get(fmt, DUELS_FORMAT_LABELS.get(fmt, fmt))
+
+
 def _format_card_detail(card: dict) -> str:
     """Full stats/abilities/legality block for a single resolved card."""
     set_display = LJCODE_TO_SETNAME.get(str(card.get("setCode")), f"Set {card.get('setCode')}")
@@ -280,8 +289,14 @@ def _format_card_detail(card: dict) -> str:
 
     # Supplement with duels.ink: legality + image + structured abilities
     duels_card = _duels_lookup_card(card)
+    bans = banned_formats(card_full_name(card))
+    if bans:
+        lines.append(
+            "**BANNED** in: " + ", ".join(_ban_format_label(f) for f in bans)
+            + f" (official ban list as of {BAN_LIST_DATE})"
+        )
     if duels_card:
-        legality = duels_card.get("legality", [])
+        legality = [f for f in duels_card.get("legality", []) if f not in bans]
         if legality:
             lines.append("Legal in: " + ", ".join(
                 DUELS_FORMAT_LABELS.get(f, f) for f in legality
@@ -491,7 +506,8 @@ def list_printings(name: str, fmt: str = "") -> str:
             if any(v is not None for v in stat_vals) else "—"
 
         duels_card = duels_lookup.get((set_code, _number_int(base)))
-        legality = (duels_card or {}).get("legality", [])
+        legality = [f for f in (duels_card or {}).get("legality", [])
+                    if not is_banned(full_name, f)]
         legal_str = ", ".join(DUELS_FORMAT_LABELS.get(f, f) for f in legality) or (
             "—" if duels_card else "?"
         )
@@ -889,7 +905,7 @@ def filter_collection(csv_path: str, format: str = "core") -> str:
             not_found += 1
             continue
 
-        if fmt in duels_card.get("legality", []):
+        if fmt in duels_card.get("legality", []) and not is_banned(row.get("Product Name", ""), fmt):
             try:
                 qty = int(float(row.get("Add to Quantity", "0") or "0"))
             except ValueError:
@@ -1065,7 +1081,7 @@ def analyze_deck(deck_list: str) -> str:
     Reports: ink curve (1-2/3-4/5-6/7+ cost brackets), inkable vs. uninkable count,
     color split, card type split, an estimated lore-per-turn (sum of Character lore
     values), a Core Constructed legality check (60-card minimum, max 4 copies of any
-    card, at most 2 ink colors), and any card names that couldn't be resolved.
+    card, at most 2 ink colors, no cards on the official Core ban list), and any card names that couldn't be resolved.
 
     Behavior: card names are matched the same simple way as `lookup_card`
     (exact, then substring) — not fuzzy-resolved like `resolve_card` — so a
@@ -1111,6 +1127,9 @@ def analyze_deck(deck_list: str) -> str:
            " — over limit: " + ", ".join(f"{n}x {c}" for c, n in legality["over_limit_cards"])),
         f"  {'✓' if legality['two_ink_colors_or_fewer'] else '✗'} At most 2 ink colors"
         + f" (used: {', '.join(legality['ink_colors_used']) or '—'})",
+        f"  {'✓' if legality['no_banned_cards'] else '✗'} No banned cards"
+        + ("" if legality["no_banned_cards"] else
+           " — banned: " + ", ".join(legality["banned_cards"])),
     ]
 
     lines = [
@@ -1340,8 +1359,8 @@ def build_deck(
     singleton beta, open since 2026-07-28 — rules/card pool may still
     change; see the project CLAUDE.md's "Format Coconut" section). It needs
     coconut_card, allows up to 3 ink colors (one must match the Coconut's
-    own ink), has no rotation and no tracked banned list (every released
-    card is treated as legal), and every card in the build is capped at 1
+    own ink), has no rotation, and every released card is legal except the
+    Coconut beta ban list (currently Bend to My Will, banned 2026-11-03), and every card in the build is capped at 1
     copy except the Coconut's associated real character, which may run up
     to 4 — this replaces the usual max-4-of-anything rule entirely. Call
     with format="coconut" and no coconut_card to get the full list of the

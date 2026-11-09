@@ -84,6 +84,19 @@ class TestAnalyzeDeck:
         assert result["legality"]["ink_colors_used"] == ["Amber", "Steel"]
 
     @patch("lorcana_mcp.deck.search_card")
+    def test_banned_card_flagged(self, mock_search):
+        mock_search.return_value = _card("My Adventure Book", 2, "Item", True, ["Amber"])
+        result = analyze_deck("4x My Adventure Book")
+        assert result["legality"]["no_banned_cards"] is False
+        assert result["legality"]["banned_cards"] == ["My Adventure Book"]
+
+    @patch("lorcana_mcp.deck.search_card")
+    def test_no_banned_cards_passes(self, mock_search):
+        mock_search.return_value = _card("Goofy - Musketeer", 2, "Character", True, ["Steel"])
+        result = analyze_deck("4x Goofy - Musketeer")
+        assert result["legality"]["no_banned_cards"] is True
+
+    @patch("lorcana_mcp.deck.search_card")
     def test_song_type_display(self, mock_search):
         mock_search.return_value = _card("Be Our Guest", 5, "Action", True, ["Amber"], subtypes=["Song"])
         result = analyze_deck("4x Be Our Guest")

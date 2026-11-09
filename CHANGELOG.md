@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Official ban list (as of 2026-11-03) is now enforced.** Ravensburger's Nov 3, 2026 update banned **My Adventure Book** in Core Constructed and **Bend to My Will** in the Format Coconut beta. **Hiram Flaversham - Toymaker** stays banned in Infinity. The new `BANNED_CARDS` table in `lorcana_mcp/api.py` (with `is_banned()`/`banned_formats()`) is checked by `lj_card_format_legal`, so `build_deck`, `filter_by_format`, and `list_printings(fmt=...)` all exclude these cards on top of duels.ink's own legality data. That guards against duels.ink lagging behind an announcement or a stale 24h cache. It is also the **only** ban check Format Coconut gets, since duels.ink doesn't track Coconut and every card used to count as legal there. `lookup_card` shows a **BANNED in:** line and drops banned formats from "Legal in". `filter_collection` skips banned rows. `analyze_deck`'s Core check gets a new "No banned cards" line. A ban covers every printing of a name, so it matches on full name: dashes, case, and TCGPlayer promo suffixes are normalized, and other Hiram Flaversham versions are unaffected. Update `BANNED_CARDS` and `BAN_LIST_DATE` whenever a new ban announcement lands.
+
++8 tests (397 → 405).
+
 ## 2.6.1 — 2026-10-18
 
 Bug fixes and promo data. No new tools.

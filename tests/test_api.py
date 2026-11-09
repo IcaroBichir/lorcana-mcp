@@ -32,6 +32,8 @@ from lorcana_mcp.api import (
     fetch_lorcana_json,
     fetch_lorcana_sets,
     lj_card_format_legal,
+    is_banned,
+    banned_formats,
     filter_by_format,
     fetch_format_coconut_cards,
     resolve_coconut_card,
@@ -755,6 +757,43 @@ class TestLjCardFormatLegal:
     def test_coconut_is_always_legal_with_no_lookup_needed(self):
         card = _fmt_card("Anything", set_code="1", number=1)
         assert lj_card_format_legal(card, "coconut", {}) is True
+
+
+class TestBanList:
+    """Official ban list (2026-11-03) overrides duels.ink legality."""
+
+    def test_core_ban_overrides_duels_core_legality(self):
+        card = _fmt_card("My Adventure Book", set_code="13", number=106)
+        lookup = {("13", 106): {"legality": ["core", "infinity"]}}
+        assert lj_card_format_legal(card, "core", lookup) is False
+        assert lj_card_format_legal(card, "infinity", lookup) is True
+
+    def test_infinity_ban_overrides_duels_infinity_legality(self):
+        card = _fmt_card("Hiram Flaversham - Toymaker", set_code="2", number=149)
+        lookup = {("2", 149): {"legality": ["infinity"]}}
+        assert lj_card_format_legal(card, "infinity", lookup) is False
+
+    def test_other_hiram_printing_not_banned(self):
+        card = _fmt_card("Hiram Flaversham - Intrigued Inventor", set_code="6", number=159)
+        lookup = {("6", 159): {"legality": ["infinity"]}}
+        assert lj_card_format_legal(card, "infinity", lookup) is True
+
+    def test_coconut_ban(self):
+        banned = _fmt_card("Bend to My Will", set_code="6", number=93)
+        assert lj_card_format_legal(banned, "coconut", {}) is False
+        assert lj_card_format_legal(_fmt_card("Anything"), "coconut", {}) is True
+
+    def test_name_built_from_name_and_version_when_no_fullname(self):
+        card = {"name": "Hiram Flaversham", "version": "Toymaker",
+                "setCode": "2", "number": 149}
+        assert lj_card_format_legal(card, "infinity", {("2", 149): {"legality": ["infinity"]}}) is False
+
+    def test_is_banned_normalizes_dash_case_and_promo_suffix(self):
+        assert is_banned("Hiram Flaversham – Toymaker", "infinity")
+        assert is_banned("my adventure book (Promo)", "core")
+        assert not is_banned("My Adventure Book", "infinity")
+        assert banned_formats("Bend to My Will") == ["coconut"]
+        assert banned_formats("Goofy - Musketeer") == []
 
 
 class TestFilterByFormat:
