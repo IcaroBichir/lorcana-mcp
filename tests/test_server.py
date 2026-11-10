@@ -19,7 +19,48 @@ def test_all_tools_registered():
         "enrich_csv", "lookup_card", "resolve_card", "list_printings", "search_cards",
         "find_song_synergies", "filter_collection", "audit_csv", "analyze_deck",
         "what_am_i_missing", "build_deck", "build_sealed_deck", "get_meta",
+        "analyze_game_log",
     }
+
+
+# ── lookup_card format="coconut" ───────────────────────────────────────────────
+
+_COCONUT = [{
+    "name": "Robin Hood", "subtitle": "\"Sneaky Sleuth\"", "color": "Emerald", "number": 14,
+    "associatedCardName": "Robin Hood - Sneaky Sleuth",
+    "abilities": [
+        {"effect": "You can have up to 4 copies of Robin Hood - Sneaky Sleuth in your deck."},
+        {"effect": "Whenever you play a character named Robin Hood, deal 1 damage."},
+    ],
+    "images": {"full": "https://example.invalid/robin.jpg"},
+}]
+
+
+def test_lookup_card_coconut_format():
+    from lorcana_mcp import server
+    with patch.object(server, "fetch_format_coconut_cards", return_value=_COCONUT):
+        out = server.lookup_card("robin hood", format="coconut")
+    assert "**Robin Hood - Sneaky Sleuth** (Format Coconut card)" in out
+    assert "Whenever you play a character named Robin Hood" in out
+    assert "up to 4 copies of Robin Hood" not in out  # deck-rule line folded into "Associated character"
+    assert "Associated character (up to 4 copies allowed): Robin Hood - Sneaky Sleuth" in out
+
+
+def test_lookup_card_notes_coconut_name_twin():
+    from lorcana_mcp import server
+    printed = {"fullName": "Robin Hood - Sneaky Sleuth", "name": "Robin Hood", "version": "Sneaky Sleuth",
+               "setCode": "5", "number": 1, "cost": 3, "color": "Emerald", "type": "Character",
+               "rarity": "Rare", "abilities": []}
+    with patch.object(server, "fetch_format_coconut_cards", return_value=_COCONUT), \
+         patch.object(server, "search_card", return_value=printed), \
+         patch.object(server, "_duels_lookup_card", return_value=None):
+        out = server.lookup_card("Robin Hood - Sneaky Sleuth")
+    assert "Format Coconut also has a card named **Robin Hood - Sneaky Sleuth**" in out
+
+
+def test_lookup_card_rejects_unknown_format():
+    from lorcana_mcp.server import lookup_card
+    assert "format must be" in lookup_card("x", format="core")
 
 
 # ── get_meta (no network needed — pure static snapshot) ────────────────────────

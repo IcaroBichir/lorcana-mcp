@@ -47,7 +47,9 @@ mcp = FastMCP(
         "(a typed list, or card names/collector numbers read from a photo) into the "
         "best 40-card deck. "
         "Also available: a hand-maintained Core Constructed metagame snapshot (tier list "
-        "plus recent tournament results) for players asking what's currently strong."
+        "plus recent tournament results) for players asking what's currently strong. "
+        "After a game on duels.ink, analyze_game_log reviews a pasted game log and gives "
+        "tips; ask which deck the player was on if you don't know, and pass it along."
     ),
 )
 
@@ -320,7 +322,7 @@ def _format_card_detail(card: dict) -> str:
 
 
 @mcp.tool()
-def lookup_card(name: str, set_name: str = "") -> str:
+def lookup_card(name: str, set_name: str = "", format: str = "") -> str:
     """
     Look up one specific, already-known Lorcana card by (near-)exact name and
     return its full stats, abilities, and format legality in one call.
@@ -346,14 +348,97 @@ def lookup_card(name: str, set_name: str = "") -> str:
     browsing/filtering many cards by criteria instead of one known name, use
     `search_cards`.
 
+    Format Coconut cards (the multiplayer beta's always-on "commander" cards)
+    live in a separate pool. Pass format="coconut" to look one up: it returns
+    the Coconut card's real ability text, its associated 4-of character, and
+    its image. Several Coconut cards share a name+subtitle with an unrelated
+    printed card (e.g. Ariel - Spectacular Singer, Robin Hood - Sneaky Sleuth),
+    so a normal lookup of such a name returns the printed card and adds a note
+    pointing at the Coconut version.
+
     Args:
         name: Card name, e.g. "Mirage - Super Recruiter" or just "Mirage".
         set_name: Optional set name to narrow the search, e.g. "Wilds Unknown".
+        format: "" (default, regular printed cards) or "coconut" (Format Coconut cards).
     """
+    fmt = (format or "").strip().lower()
+    if fmt and fmt != "coconut":
+        return 'format must be "" (printed cards) or "coconut".'
+    if fmt == "coconut":
+        try:
+            pool = fetch_format_coconut_cards()
+        except Exception as e:
+            return f"Failed to fetch Format Coconut cards: {e}"
+        coconut = resolve_coconut_card(name, pool)
+        if not coconut:
+            return (f'No Format Coconut card matches "{name}".\n\n'
+                    + _coconut_card_menu(pool))
+        return _format_coconut_detail(coconut)
+
     card = search_card(name, set_name)
     if not card:
         return f'No card found matching "{name}"' + (f' in set "{set_name}"' if set_name else "") + "."
-    return _format_card_detail(card)
+    out = _format_card_detail(card)
+    twin = _coconut_name_twin(card_full_name(card))
+    if twin:
+        out += (
+            f"\n\n_Note: Format Coconut also has a card named **{_coconut_display_name(twin)}** "
+            "with a different ability. This is the printed card; call "
+            "lookup_card(name, format=\"coconut\") for the Coconut version._"
+        )
+    return out
+
+
+def _coconut_display_name(c: dict) -> str:
+    sub = (c.get("subtitle") or "").strip().strip('"').strip("\u201c\u201d")
+    return f"{c.get('name', '')} - {sub}" if sub else c.get("name", "")
+
+
+def _coconut_name_twin(full_name: str) -> dict | None:
+    """The Coconut card whose name+subtitle equals this printed card's, if any.
+    Never raises: a Coconut fetch failure just means no note."""
+    try:
+        pool = fetch_format_coconut_cards()
+    except Exception:
+        return None
+    key = _norm_name(full_name)
+    for c in pool:
+        if _norm_name(_coconut_display_name(c)) == key:
+            return c
+    return None
+
+
+def _norm_name(n: str) -> str:
+    return " ".join(n.replace("\u2013", "-").replace('"', "").split()).casefold()
+
+
+def _format_coconut_detail(c: dict) -> str:
+    lines = [
+        f"**{_coconut_display_name(c)}** (Format Coconut card)",
+        f"Ink: {c.get('color', '—')} · Coconut #{c.get('number', '?')}",
+    ]
+    assoc = c.get("associatedCardName")
+    if assoc:
+        lines.append(f"Associated character (up to 4 copies allowed): {assoc}")
+    lines.append("")
+    lines.append("**Abilities:**")
+    for ab in c.get("abilities", []):
+        eff = (ab.get("effect") or ab.get("fullText") or "").strip()
+        if eff.lower().startswith("you can have up to 4 copies"):
+            continue
+        if eff:
+            lines.append(f"- {eff}")
+    lines.append("")
+    lines.append(
+        "Coconut cards are never played: the card sits outside your deck as a passive "
+        "ability for the whole game. Deck rules: up to 3 inks (one must match), 60+ "
+        "cards, singleton except the associated character, first to 25 lore. "
+        "Format Coconut is in open beta, so abilities can change."
+    )
+    img = (c.get("images") or {}).get("full")
+    if img:
+        lines.append(f"Image: {img}")
+    return "\n".join(lines)
 
 
 @mcp.tool()
@@ -1994,6 +2079,64 @@ def _duels_lookup_card(lj_card: dict) -> dict | None:
     if not set_code or number is None:
         return None
     return duels.get((set_code, int(number)))
+
+
+@mcp.tool()
+def analyze_game_log(log: str, deck_list: str = "", deck_path: str = "") -> str:
+    """
+    Review a finished (or conceded) duels.ink game from its pasted game log:
+    what happened turn by turn, why the game was won or lost, and concrete
+    tips for next time.
+
+    How the player gets the log: in duels.ink, open the in-game log panel and
+    copy all of it. Paste it as `log` exactly as copied. It works with one
+    event per line or with everything run together on one line (some copies
+    lose the line breaks). "You" in the log is the player asking.
+
+    What it does: replays the log to track lore, ink, your hand (you see your
+    own draws), both boards and every banish with its cause. It undoes any
+    "free undo" steps first. Reports:
+      - result, turns, on the play/draw, mulligans;
+      - a per-turn table of your ink, plays (ink paid vs. available), songs,
+        quests and the lore race;
+      - the opponent's inks, cards seen, and the closest known tournament
+        list (from get_meta's bundled decklists, same inks only);
+      - key moments (multi-kill turns, top opposing questers);
+      - tips: damage-sweeper exposure, board collapses to challenges,
+        questing into a challenge, threats left alive too long, missed ink,
+        unspent ink, ink choice, losing challenges, slow starts.
+
+    Deck-specific tips need the player's deck. Pass it as `deck_list`
+    ("4x Card Name" per line, the duels.ink import format) or `deck_path` (a
+    file containing such a list, e.g. a deck .md with a duels.ink import
+    block; the last such block is used). **If neither is given and you don't
+    already know which deck the player was on, ask them which deck they
+    played before (or after) calling this**, since the deck comparison flags
+    inked low-count payoffs, key 3–4-ofs never seen, and log cards that
+    aren't in the list.
+
+    Limits: the opponent's hand is hidden. Activated-ability costs and ink-
+    drop payments aren't itemised in duels.ink logs, so ink math counts card
+    costs paid. Tips are heuristics. Present them as things to check, not
+    verdicts.
+
+    Args:
+        log: The full duels.ink game log text.
+        deck_list: Optional deck list the player used ("4x Card Name" per line).
+        deck_path: Optional path to a file containing the deck list.
+    """
+    from .gamelog import analyze_game_log as _analyze_log, format_game_review, read_deck_file
+    deck_text = deck_list
+    if not deck_text.strip() and deck_path.strip():
+        try:
+            deck_text = read_deck_file(deck_path.strip())
+        except OSError as e:
+            return f"Couldn't read deck_path: {e}"
+    try:
+        result = _analyze_log(log, deck_text)
+    except Exception as e:
+        return f"Failed to analyze the log: {e}"
+    return format_game_review(result)
 
 
 @mcp.tool()

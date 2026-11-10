@@ -20,9 +20,16 @@ from __future__ import annotations
 
 from .tournaments import TOURNAMENTS, format_event, list_events
 
-META_SNAPSHOT_DATE = "2026-09-13"
+META_SNAPSHOT_DATE = "2026-11-10"
 
 META_SOURCES = [
+    "inkDecks.com Core Constructed meta report, November 2026 (Hyperia City era): "
+    "Emerald/Steel Evasive #1 at ~20.7%, then Amber/Emerald Circle and Amber/Sapphire "
+    "Detectives. Only the top-3 ranking and the #1 share were captured",
+    "@onemorelore.au Instagram \"Meta Decks — Hyperia City\" weekly roundup (8 lists, "
+    "captured 2026-11-10); full decklists via get_meta(event=\"onemorelore\")",
+    "ROK local tournament, 2026-10-26 (6 lists, winner only); full decklists via "
+    "get_meta(event=\"rok\")",
     "inkDecks.com (metagame breakdown, tier lists)",
     "lorcana.gg (tier list, rotation tracker)",
     "Disney Lorcana North American Championship 2026, Disneyland Resort, Anaheim CA "
@@ -44,75 +51,71 @@ META_SOURCES = [
 # Core Constructed ink-pair tier list. `meta_share` is a rough, mixed-source
 # figure (some from general metagame trackers, some from the championship
 # results below) — treat it as directional, not a precise stat.
-# `verified_recent_event` marks the pairs actually re-checked against a real
+# `verified_recent_event` marks the pairs seen in a Hyperia City-era (Set 14+)
+# result or meta report; older comment follows. Originally it marked pairs re-checked against a real
 # recent championship result (NAC 2026, Asia Championship 2026, and/or the
 # FL CCQ — see RECENT_TOURNAMENTS below); every other row is un-refreshed
 # June-2026-era data that predates those events and may itself be stale.
 CORE_TIER_LIST: list[dict] = [
-    {"pair": ("Emerald", "Steel"), "archetype": "Darkwing Duck Tempo", "tier": "S",
-     "meta_share": "69% of NAC 2026 Top 16; absent from the Asia Championship 2026 Top 8 but "
-                   "back to 4 of 16 at the Europe Championship 2026 — strong across regions, "
-                   "not just a one-event spike",
-     "style": "Elinor/Mushu/Tod/Ursula/Vixey core + Darkwing Duck package + burn songs",
+    {"pair": ('Emerald', 'Steel'), "archetype": 'Evasive Tempo (Darkwing Duck / Elinor)', "tier": 'S',
+     "meta_share": "#1 in inkDecks' November 2026 Core report (~20.7%). Also the pre-Set-14 powerhouse (69% of the NAC 2026 Top 16)",
+     "style": 'Cheap Evasive bodies (Pegasus, White Rabbit, Mushu, Vixey) + Elinor - Renowned Diplomat + Gaetan Moliere draw + Angela/Francine Resist + Strength of a Raging Fire',
      "verified_recent_event": True},
-    {"pair": ("Amber", "Amethyst"), "archetype": "Madrigal Midrange (was Evasive/Flood)",
-     "tier": "S",
-     "meta_share": "won NAC 2026; 6 of 8 (incl. runner-up) at Asia Championship 2026; "
-                   "2 of 16 at the Europe Championship 2026",
-     "style": "Grandmother Willow/Hamm 2-drop curve-accel + Luisa Madrigal Shift chain "
-              "(Pushing Through -> Confident Climber) + Tigger/Isis Vanderchill tempo + "
-              "Gaston - Superior Archer removal + Ohana Means Family/The Horseman Strikes! draw",
+    {"pair": ('Amber', 'Emerald'), "archetype": 'Circle of Life Songs', "tier": 'S',
+     "meta_share": "#2 in inkDecks' November 2026 report (share not captured). In the onemorelore roundup. Was also the Europe Championship's biggest pair (7 of 16), as a different, Aurora/Pocahontas shell",
+     "style": 'Singers (Angel - Siren Singer, Ursula - Vanessa, Max Goof - Karaoke Star) + Circle of Life + Malicious, Mean, and Scary -> Prince Phillip wipe + Milo Thatch',
      "verified_recent_event": True},
-    {"pair": ("Amethyst", "Sapphire"), "archetype": "Blurple / Control", "tier": "S",
-     "meta_share": "~18%", "style": "Draw-heavy control; hard to run out of resources",
-     "verified_recent_event": False},
-    {"pair": ("Amber", "Emerald"), "archetype": "Aggro", "tier": "S",
-     "meta_share": "~17% overall, but the Europe Championship 2026's 7-of-16 Amber/Emerald "
-                   "field split into three distinct shells, none matching this row's aggro "
-                   "description: the champion's Aurora/Pocahontas cost-discount 'Protective' "
-                   "build (5 of 16), an Items/Locations control build, and a Singer/Song "
-                   "build — the aggro/Evasive read below may be stale, treat with caution",
-     "style": "Fast board + unstoppable Evasive questors (see meta_share caveat)",
+    {"pair": ('Amber', 'Sapphire'), "archetype": 'Zootopia Detectives', "tier": 'A',
+     "meta_share": "#3 in inkDecks' November 2026 report. In the onemorelore roundup and the ROK field",
+     "style": 'All-character Detective tribal: five Judy Hopps printings, Nick Wilde Support, Elisa Maza, Fangmeyer, Gaston - Superior Archer removal',
      "verified_recent_event": True},
-    {"pair": ("Amethyst", "Emerald"), "archetype": "Discard / Ramp Control", "tier": "A",
-     "meta_share": "won the Asia Championship 2026 (+ a Top 4) and swept the FL CCQ "
-                   "St. Augustine final; 1 Top 16 at the Europe Championship 2026 — both EN "
-                   "Core; no tracked field % yet",
-     "style": "Lyle Tiberius Rourke discard-matters lore drain + Retro Evolution Device/"
-              "Chernabog ramp-reanimate + Hades - Looking for a Deal draw + "
-              "Prince Phillip - Vanquisher of Foes / Malicious, Mean, and Scary board wipe",
+    {"pair": ('Emerald', 'Sapphire'), "archetype": 'Mickey & Minnie Go-Wide', "tier": 'A',
+     "meta_share": 'Won the ROK local (2 of 6 lists). In the onemorelore roundup',
+     "style": 'Minnie/Mickey 1-3 drops + Mickey & Minnie - Adventuring Duo + Ward top end (Scuttle - Birdbrained, Winifred, Hades - Meticulous Schemer) + Hades - Infernal Schemer',
      "verified_recent_event": True},
-    {"pair": ("Emerald", "Sapphire"), "archetype": "Control", "tier": "A",
-     "meta_share": "~14%", "style": "Disruption + ramp + card advantage",
+    {"pair": ('Amethyst', 'Emerald'), "archetype": 'Retro Discard / Don Karnage', "tier": 'A',
+     "meta_share": 'Won the Asia Championship + FL CCQ before Set 14. Its Hyperia City version is in the onemorelore roundup',
+     "style": 'Don Karnage Shift + Aladdin & Genie / Tod draw + Retro Evolution Device + Malicious, Mean, and Scary -> Prince Phillip wipe',
+     "verified_recent_event": True},
+    {"pair": ('Emerald', 'Ruby'), "archetype": 'Discard-Matters Control (Olaf / Leviathan)', "tier": 'A',
+     "meta_share": "New with Set 14: in the onemorelore roundup and the ROK field ('Rg retro')",
+     "style": 'Rivera Family Photo / The Torn Corner discard engine + Olaf - Snowman of Action + The Leviathan + Lyle Tiberius Rourke + Prince Phillip wipe',
+     "verified_recent_event": True},
+    {"pair": ('Amber', 'Amethyst'), "archetype": 'Madrigal Midrange', "tier": 'A',
+     "meta_share": "Won NAC 2026 and went 6 of 8 at Asia before Set 14. Still in the onemorelore roundup, but not in inkDecks' November top 3",
+     "style": 'Grandmother Willow/Hamm curve-accel + Luisa Madrigal Shift chain + Tigger/Isis tempo + Gaston - Superior Archer + Demona draw',
+     "verified_recent_event": True},
+    {"pair": ('Amethyst', 'Ruby'), "archetype": 'Mulan / Gargoyles Tempo', "tier": 'B',
+     "meta_share": 'In the onemorelore roundup and the ROK field',
+     "style": "Rafiki/Luisa/Pepita Challenger 1-2 drops + Mulan - Martial Arts Master + Demona - Scourge + Hades - Looking for a Deal + Medallion Weights / Merlin's Shop",
+     "verified_recent_event": True},
+    {"pair": ('Amber', 'Ruby'), "archetype": 'Discard-Matters Removal', "tier": 'B',
+     "meta_share": "One list in the ROK field ('RYL')",
+     "style": 'Rivera Family Photo / The Torn Corner + Red Alert, Raging Storm, Gaston removal + Olaf / Maleficent - Monstrous Dragon top end',
+     "verified_recent_event": True},
+    {"pair": ('Amber', 'Steel'), "archetype": 'Steelsong', "tier": 'B',
+     "meta_share": "No Hyperia City-era result tracked. Podcana's early tier list put it at B",
+     "style": 'Singer unlock -> free Songs; tempo value',
      "verified_recent_event": False},
-    {"pair": ("Amber", "Steel"), "archetype": "Steelsong", "tier": "A",
-     "meta_share": "strong in Infinity", "style": "Singer unlock -> free Songs; tempo value",
+    {"pair": ('Amethyst', 'Steel'), "archetype": 'Midrange', "tier": 'B',
+     "meta_share": "No Hyperia City-era result tracked. Podcana's early tier list put it at B",
+     "style": 'Sturdy board + card draw; ink-drop payoffs from Set 14',
      "verified_recent_event": False},
-    {"pair": ("Amethyst", "Steel"), "archetype": "Aggro/Control", "tier": "A",
-     "meta_share": "competitive", "style": "Sturdy board + card draw; well-rounded",
+    {"pair": ('Amethyst', 'Sapphire'), "archetype": 'Blurple / Control', "tier": 'C',
+     "meta_share": "No Hyperia City-era result tracked. Podcana's early tier list put it at D",
+     "style": 'Draw-heavy control',
      "verified_recent_event": False},
-    {"pair": ("Amethyst", "Ruby"), "archetype": "Bounce", "tier": "A",
-     "meta_share": "top in Infinity", "style": "Bounce + removal + card draw",
+    {"pair": ('Ruby', 'Sapphire'), "archetype": 'Items/Control', "tier": 'C',
+     "meta_share": "No Hyperia City-era result tracked. Podcana's early tier list put it at D",
+     "style": 'Ramp into late-game removal',
      "verified_recent_event": False},
-    {"pair": ("Amber", "Ruby"), "archetype": "Toys", "tier": "B",
-     "meta_share": "~5%", "style": "Toy Story tribal; board pressure",
+    {"pair": ('Ruby', 'Steel'), "archetype": 'Midrange', "tier": 'C',
+     "meta_share": "No Hyperia City-era result tracked. Podcana's early tier list put it at C",
+     "style": 'Combat-focused midrange',
      "verified_recent_event": False},
-    {"pair": ("Ruby", "Sapphire"), "archetype": "Items/Control", "tier": "B",
-     "meta_share": "~12% in Infinity", "style": "Ramp into late-game removal",
-     "verified_recent_event": False},
-    {"pair": ("Amber", "Sapphire"), "archetype": "Toys/Ramp Midrange", "tier": "C",
-     "meta_share": "niche",
-     "style": "Ramp/Toys midrange; the NAC 2026 title once credited to this pair was "
-              "really Amber/Amethyst (the winning list has zero Sapphire cards)",
-     "verified_recent_event": False},
-    {"pair": ("Ruby", "Steel"), "archetype": "Midrange", "tier": "C",
-     "meta_share": "niche", "style": "Combat-focused midrange",
-     "verified_recent_event": False},
-    {"pair": ("Emerald", "Ruby"), "archetype": "Aggressive", "tier": "C",
-     "meta_share": "niche", "style": "Challenging synergies",
-     "verified_recent_event": False},
-    {"pair": ("Sapphire", "Steel"), "archetype": "Hero/Ramp", "tier": "C",
-     "meta_share": "niche", "style": "Hero tribal + ramp",
+    {"pair": ('Sapphire', 'Steel'), "archetype": 'Hero/Ramp', "tier": 'D',
+     "meta_share": "No Hyperia City-era result tracked. Podcana's early tier list put it at D",
+     "style": 'Hero tribal + ramp',
      "verified_recent_event": False},
 ]
 
@@ -120,6 +123,26 @@ CORE_TIER_LIST: list[dict] = [
 # decklists here (call get_meta(event="...") for those, or see tournaments.py);
 # this is a shape-of-the-field summary, not a decklist database.
 RECENT_TOURNAMENTS: list[dict] = [
+    {
+        "name": "ROK local tournament — Hyperia City",
+        "date": "2026-10-26",
+        "location": "Local game store (EN Core Constructed), first weekend after Set 14",
+        "champion": {"pair": ("Emerald", "Sapphire"),
+                     "note": "Mickey & Minnie Go-Wide (\"Mickey 14\")"},
+        "runner_up": None,
+        "placement_label": "Field (6 lists)",
+        "placement_counts": {
+            "Emerald/Sapphire Mickey & Minnie": 2,
+            "Amber/Sapphire Detectives": 1,
+            "Emerald/Ruby Discard-Matters": 1,
+            "Amber/Ruby Discard-Matters": 1,
+            "Amethyst/Ruby Mulan Tempo": 1,
+        },
+        "headline": "Small local event, only the winner reported. It's here because it's one of "
+                    "the few real Hyperia City-era results with full lists. Full lists via "
+                    "get_meta(event=\"rok\"). See also get_meta(event=\"onemorelore\") for "
+                    "8 curated post-Set-14 lists, one per archetype.",
+    },
     {
         "name": "Disney Lorcana Challenge — Europe Championship 2026",
         "date": "2026-09-13",
@@ -290,11 +313,11 @@ def format_meta_snapshot(ink_colors: str = "", event: str = "") -> str:
     lines += [f"- {s}" for s in META_SOURCES]
     lines.append("")
 
-    lines.append("| Pair | Archetype | Tier | Meta share | Style | Verified vs. a recent championship? |")
+    lines.append("| Pair | Archetype | Tier | Meta share | Style | Seen in Hyperia City-era results? |")
     lines.append("|---|---|---|---|---|---|")
     for r in rows:
         a, b = r["pair"]
-        verified = "yes" if r["verified_recent_event"] else "no — pre-dates those events"
+        verified = "yes" if r["verified_recent_event"] else "no — no Set 14 data"
         lines.append(
             f"| {a}/{b} | {r['archetype']} | {r['tier']} | {r['meta_share']} | "
             f"{r['style']} | {verified} |"
@@ -303,11 +326,10 @@ def format_meta_snapshot(ink_colors: str = "", event: str = "") -> str:
     if wanted is None:
         lines.append("")
         lines.append(
-            "Only the rows flagged \"yes\" above (Emerald/Steel, Amber/Amethyst, "
-            "Amethyst/Emerald) have been directly verified against a real recent "
-            "championship result (NAC 2026 Anaheim, Asia Championship 2026 Hong Kong, "
-            "and/or the FL CCQ St. Augustine). Every other row is older, unverified "
-            "metagame-tracker data and may itself be stale."
+            "Rows flagged \"yes\" were seen in a Hyperia City-era (Set 14+) result or meta "
+            "report: inkDecks' November 2026 Core report, the onemorelore.au weekly roundup, "
+            "or the ROK local. Rows flagged \"no\" have no post-Set-14 data and rely on "
+            "Podcana's pre-release tier list, so treat them as guesses."
         )
 
     if RECENT_TOURNAMENTS:

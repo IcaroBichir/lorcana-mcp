@@ -1,0 +1,502 @@
+{
+"Alien - True Believer": {
+"fullName": "Alien - True Believer",
+"type": "Character",
+"cost": 1,
+"inkwell": true,
+"color": "Emerald",
+"willpower": 1,
+"strength": 1,
+"lore": 1
+},
+"Alma Madrigal - Leading the Way": {
+"fullName": "Alma Madrigal - Leading the Way",
+"type": "Character",
+"cost": 2,
+"inkwell": true,
+"color": "Amethyst",
+"willpower": 2,
+"strength": 1,
+"lore": 1
+},
+"Andy's Room - Home Base": {
+"fullName": "Andy's Room - Home Base",
+"type": "Location",
+"cost": 3,
+"inkwell": true,
+"color": "Amber",
+"willpower": 8,
+"strength": null,
+"lore": 1
+},
+"Buzz Lightyear - Grounded": {
+"fullName": "Buzz Lightyear - Grounded",
+"type": "Character",
+"cost": 3,
+"inkwell": true,
+"color": "Emerald",
+"willpower": 4,
+"strength": 4,
+"lore": 1
+},
+"Buzz Lightyear - On the Way": {
+"fullName": "Buzz Lightyear - On the Way",
+"type": "Character",
+"cost": 3,
+"inkwell": true,
+"color": "Emerald",
+"willpower": 2,
+"strength": 4,
+"lore": 1
+},
+"Buzz Lightyear - Space Ranger": {
+"fullName": "Buzz Lightyear - Space Ranger",
+"type": "Character",
+"cost": 2,
+"inkwell": true,
+"color": "Emerald",
+"willpower": 3,
+"strength": 3,
+"lore": 1
+},
+"Card Advantage": {
+"fullName": "Card Advantage",
+"type": "Action",
+"cost": 2,
+"inkwell": true,
+"color": "Steel",
+"willpower": null,
+"strength": null,
+"lore": null
+},
+"Copper - Creative Storyteller": {
+"fullName": "Copper - Creative Storyteller",
+"type": "Character",
+"cost": 2,
+"inkwell": true,
+"color": "Emerald",
+"willpower": 2,
+"strength": 2,
+"lore": 2
+},
+"Copper - Hound Pup": {
+"fullName": "Copper - Hound Pup",
+"type": "Character",
+"cost": 1,
+"inkwell": true,
+"color": "Emerald",
+"willpower": 1,
+"strength": 2,
+"lore": 1
+},
+"Demona - Betrayer of the Clan": {
+"fullName": "Demona - Betrayer of the Clan",
+"type": "Character",
+"cost": 4,
+"inkwell": true,
+"color": "Amethyst",
+"willpower": 6,
+"strength": 4,
+"lore": 1
+},
+"Demona - Scourge of the Wyvern Clan": {
+"fullName": "Demona - Scourge of the Wyvern Clan",
+"type": "Character",
+"cost": 6,
+"inkwell": true,
+"color": "Amethyst",
+"willpower": 6,
+"strength": 5,
+"lore": 2
+},
+"Dinky - Has the Brains": {
+"fullName": "Dinky - Has the Brains",
+"type": "Character",
+"cost": 2,
+"inkwell": true,
+"color": "Emerald",
+"willpower": 2,
+"strength": 1,
+"lore": 2
+},
+"Education or Elimination": {
+"fullName": "Education or Elimination",
+"type": "Action",
+"cost": 4,
+"inkwell": true,
+"color": "Emerald",
+"willpower": null,
+"strength": null,
+"lore": null
+},
+"Elinor - Renowned Diplomat": {
+"fullName": "Elinor - Renowned Diplomat",
+"type": "Character",
+"cost": 4,
+"inkwell": false,
+"color": "Emerald",
+"willpower": 4,
+"strength": 3,
+"lore": 1
+},
+"Elsa - Snow Queen": {
+"fullName": "Elsa - Snow Queen",
+"type": "Character",
+"cost": 3,
+"inkwell": true,
+"color": "Amethyst",
+"willpower": 3,
+"strength": 2,
+"lore": 1
+},
+"Gaston - Superior Archer": {
+"fullName": "Gaston - Superior Archer",
+"type": "Character",
+"cost": 5,
+"inkwell": true,
+"color": "Amber",
+"willpower": 4,
+"strength": 3,
+"lore": 1
+},
+"Genie - Of the Lamp": {
+"fullName": "Genie - Of the Lamp",
+"type": "Character",
+"cost": 4,
+"inkwell": true,
+"color": "Emerald",
+"willpower": 3,
+"strength": 2,
+"lore": 2
+},
+"Grandmother Willow - Ancient Advisor": {
+"fullName": "Grandmother Willow - Ancient Advisor",
+"type": "Character",
+"cost": 2,
+"inkwell": false,
+"color": "Amber",
+"willpower": 2,
+"strength": 1,
+"lore": 1
+},
+"Hades - Looking for a Deal": {
+"fullName": "Hades - Looking for a Deal",
+"type": "Character",
+"cost": 5,
+"inkwell": true,
+"color": "Amethyst",
+"willpower": 4,
+"strength": 3,
+"lore": 1
+},
+"Hamish, Hubert & Harris - Troublemaking Triplets": {
+"fullName": "Hamish, Hubert & Harris - Troublemaking Triplets",
+"type": "Character",
+"cost": 3,
+"inkwell": true,
+"color": "Emerald",
+"willpower": 3,
+"strength": 3,
+"lore": 1
+},
+"Isis Vanderchill - Ice Queen of St. Canard": {
+"fullName": "Isis Vanderchill - Ice Queen of St. Canard",
+"type": "Character",
+"cost": 4,
+"inkwell": false,
+"color": "Amethyst",
+"willpower": 4,
+"strength": 4,
+"lore": 1
+},
+"Judy Hopps - Snowball Patrol": {
+"fullName": "Judy Hopps - Snowball Patrol",
+"type": "Character",
+"cost": 2,
+"inkwell": true,
+"color": "Steel",
+"willpower": 2,
+"strength": 2,
+"lore": 1
+},
+"Junior Woodchuck Guidebook": {
+"fullName": "Junior Woodchuck Guidebook",
+"type": "Item",
+"cost": 2,
+"inkwell": true,
+"color": "Amethyst",
+"willpower": null,
+"strength": null,
+"lore": null
+},
+"Luisa Madrigal - Confident Climber": {
+"fullName": "Luisa Madrigal - Confident Climber",
+"type": "Character",
+"cost": 5,
+"inkwell": true,
+"color": "Amethyst",
+"willpower": 4,
+"strength": 6,
+"lore": 1
+},
+"Luisa Madrigal - Pushing Through": {
+"fullName": "Luisa Madrigal - Pushing Through",
+"type": "Character",
+"cost": 1,
+"inkwell": true,
+"color": "Amethyst",
+"willpower": 3,
+"strength": 0,
+"lore": 1
+},
+"Merida - Defiant Daughter": {
+"fullName": "Merida - Defiant Daughter",
+"type": "Character",
+"cost": 2,
+"inkwell": true,
+"color": "Emerald",
+"willpower": 3,
+"strength": 2,
+"lore": 1
+},
+"Merida - Formidable Archer": {
+"fullName": "Merida - Formidable Archer",
+"type": "Character",
+"cost": 5,
+"inkwell": false,
+"color": "Steel",
+"willpower": 5,
+"strength": 3,
+"lore": 2
+},
+"Merida - Gifted Archer": {
+"fullName": "Merida - Gifted Archer",
+"type": "Character",
+"cost": 5,
+"inkwell": true,
+"color": "Emerald",
+"willpower": 6,
+"strength": 3,
+"lore": 2
+},
+"Petrify": {
+"fullName": "Petrify",
+"type": "Action",
+"cost": 1,
+"inkwell": false,
+"color": "Amethyst",
+"willpower": null,
+"strength": null,
+"lore": null
+},
+"Piercing Attack": {
+"fullName": "Piercing Attack",
+"type": "Action",
+"cost": 2,
+"inkwell": true,
+"color": "Emerald",
+"willpower": null,
+"strength": null,
+"lore": null
+},
+"Put That Thing Back": {
+"fullName": "Put That Thing Back",
+"type": "Action",
+"cost": 4,
+"inkwell": true,
+"color": "Emerald",
+"willpower": null,
+"strength": null,
+"lore": null
+},
+"RC - Remote-Controlled Car": {
+"fullName": "RC - Remote-Controlled Car",
+"type": "Character",
+"cost": 1,
+"inkwell": true,
+"color": "Emerald",
+"willpower": 2,
+"strength": 3,
+"lore": 2
+},
+"Rafiki - Mystical Fighter": {
+"fullName": "Rafiki - Mystical Fighter",
+"type": "Character",
+"cost": 1,
+"inkwell": true,
+"color": "Amethyst",
+"willpower": 2,
+"strength": 0,
+"lore": 1
+},
+"Rex - Protective Dinosaur": {
+"fullName": "Rex - Protective Dinosaur",
+"type": "Character",
+"cost": 2,
+"inkwell": true,
+"color": "Amber",
+"willpower": 1,
+"strength": 3,
+"lore": 1
+},
+"Squeaks - Cozy Caterpillar": {
+"fullName": "Squeaks - Cozy Caterpillar",
+"type": "Character",
+"cost": 2,
+"inkwell": true,
+"color": "Emerald",
+"willpower": 4,
+"strength": 0,
+"lore": 1
+},
+"Strike a Good Match": {
+"fullName": "Strike a Good Match",
+"type": "Action",
+"cost": 2,
+"inkwell": true,
+"color": "Emerald",
+"willpower": null,
+"strength": null,
+"lore": null
+},
+"Swooping Strike": {
+"fullName": "Swooping Strike",
+"type": "Action",
+"cost": 1,
+"inkwell": true,
+"color": "Amethyst",
+"willpower": null,
+"strength": null,
+"lore": null
+},
+"Three Arrows": {
+"fullName": "Three Arrows",
+"type": "Action",
+"cost": 3,
+"inkwell": true,
+"color": "Steel",
+"willpower": null,
+"strength": null,
+"lore": null
+},
+"Tod & Copper - Best of Friends": {
+"fullName": "Tod & Copper - Best of Friends",
+"type": "Character",
+"cost": 4,
+"inkwell": true,
+"color": "Emerald",
+"willpower": 3,
+"strength": 3,
+"lore": 2
+},
+"Tod - All Alone": {
+"fullName": "Tod - All Alone",
+"type": "Character",
+"cost": 1,
+"inkwell": true,
+"color": "Emerald",
+"willpower": 2,
+"strength": 2,
+"lore": 1
+},
+"Tod - Clever Fox": {
+"fullName": "Tod - Clever Fox",
+"type": "Character",
+"cost": 3,
+"inkwell": true,
+"color": "Emerald",
+"willpower": 2,
+"strength": 1,
+"lore": 1
+},
+"Tod - Nimble Fox": {
+"fullName": "Tod - Nimble Fox",
+"type": "Character",
+"cost": 5,
+"inkwell": true,
+"color": "Emerald",
+"willpower": 4,
+"strength": 5,
+"lore": 2
+},
+"Violet Parr - Force Field Practice": {
+"fullName": "Violet Parr - Force Field Practice",
+"type": "Character",
+"cost": 2,
+"inkwell": true,
+"color": "Steel",
+"willpower": 2,
+"strength": 3,
+"lore": 1
+},
+"Vixey - Forest Friend": {
+"fullName": "Vixey - Forest Friend",
+"type": "Character",
+"cost": 3,
+"inkwell": true,
+"color": "Emerald",
+"willpower": 3,
+"strength": 1,
+"lore": 2
+},
+"Widow Tweed - Kindly Soul": {
+"fullName": "Widow Tweed - Kindly Soul",
+"type": "Character",
+"cost": 6,
+"inkwell": false,
+"color": "Amber",
+"willpower": 8,
+"strength": 2,
+"lore": 2
+},
+"Windstorm": {
+"fullName": "Windstorm",
+"type": "Action",
+"cost": 4,
+"inkwell": true,
+"color": "Steel",
+"willpower": null,
+"strength": null,
+"lore": null
+},
+"Woody - Helping a Friend": {
+"fullName": "Woody - Helping a Friend",
+"type": "Character",
+"cost": 4,
+"inkwell": false,
+"color": "Amber",
+"willpower": 4,
+"strength": 2,
+"lore": 2
+},
+"Woody - Jungle Guide": {
+"fullName": "Woody - Jungle Guide",
+"type": "Character",
+"cost": 5,
+"inkwell": false,
+"color": "Amber",
+"willpower": 5,
+"strength": 1,
+"lore": 2
+},
+"Woody - Waiting for a Friend": {
+"fullName": "Woody - Waiting for a Friend",
+"type": "Character",
+"cost": 1,
+"inkwell": true,
+"color": "Amber",
+"willpower": 2,
+"strength": 2,
+"lore": 1
+},
+"You've Got a Friend in Me": {
+"fullName": "You've Got a Friend in Me",
+"type": "Action",
+"cost": 3,
+"inkwell": true,
+"color": "Amber",
+"willpower": null,
+"strength": null,
+"lore": null
+}
+}

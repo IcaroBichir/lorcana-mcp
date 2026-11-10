@@ -1,0 +1,318 @@
+Your starting hand: Alien - True Believer, Merida - Defiant Daughter, You've Got a Friend in Me, Merida - Gifted Archer, Buzz Lightyear - Grounded, Rex - Protective Dinosaur, Tod - Nimble Fox
+You mulliganed 2 cards: Merida - Gifted Archer, Tod - Nimble Fox. Drew: Alien - True Believer, Woody - Helping a Friend
+Opponent mulliganed 4 cards
+Game started!
+
+--- Turn 1 ---
+Your turn begins
+Ready step: cards readied
+Set step
+You added Buzz Lightyear - Grounded to ink
+You played Alien - True Believer (cost 1)
+You gained 45 seconds (turn end)
+You ended your turn
+
+--- Turn 2 ---
+Opponent's turn begins
+Opponent's timer started (1:00)
+Ready step: cards readied
+Set step
+Draw step
+Opponent drew a card
+Opponent added Tod & Copper - Best of Friends to ink
+Opponent played Tod - All Alone (cost 1)
+Opponent gained 45 seconds (turn end)
+Opponent ended their turn
+
+--- Turn 3 ---
+Your turn begins
+Your timer started (1:45)
+Ready step: cards readied
+Set step
+Draw step
+You drew Buzz Lightyear - On the Way
+You added Buzz Lightyear - On the Way to ink
+You played Merida - Defiant Daughter (cost 2)
+You gained 45 seconds (turn end)
+You ended your turn
+
+--- Turn 4 ---
+Opponent's turn begins
+Opponent's timer started (1:32)
+Ready step: cards readied
+Set step
+Draw step
+Opponent drew a card
+Opponent added Dinky - Has the Brains to ink
+Opponent shifted Tod & Copper - Best of Friends onto Tod - All Alone (Shift 2)
+Opponent quested with Tod & Copper - Best of Friends (+2 [LORE], 0 -> 2)
+Opponent gained 45 seconds (turn end)
+Opponent ended their turn
+
+--- Turn 5 ---
+Your turn begins
+Your timer started (2:00)
+Ready step: cards readied
+Set step
+Draw step
+You drew Buzz Lightyear - Grounded
+You added Buzz Lightyear - Grounded to ink
+You played You've Got a Friend in Me (cost 3)
+You chose Woody - Jungle Guide, Buzz Lightyear - Grounded (YOU'VE GOT A FRIEND IN ME)
+You revealed Woody - Jungle Guide(YOU'VE GOT A FRIEND IN ME) - put into hand
+You revealed Buzz Lightyear - Grounded(YOU'VE GOT A FRIEND IN ME) - put into hand
+You reordered 2 cards (YOU'VE GOT A FRIEND IN ME)
+You gained 45 seconds (turn end)
+You ended your turn
+
+--- Turn 6 ---
+Opponent's turn begins
+Opponent's timer started (1:55)
+Ready step: cards readied
+Set step
+Draw step
+Opponent drew a card
+Opponent played Vixey - Forest Friend (cost 3 → 2, SHOWIN' UP)
+Opponent added Squeaks - Cozy Caterpillar to ink
+Opponent quested with Tod & Copper - Best of Friends (+2 [LORE], 2 -> 4)
+Opponent gained 45 seconds (turn end)
+Opponent ended their turn
+
+--- Turn 7 ---
+Your turn begins
+Your timer started (2:00)
+Ready step: cards readied
+Set step
+Draw step
+You drew Elinor - Renowned Diplomat
+You added Buzz Lightyear - Grounded to ink
+You chose: Enter Exerted (Rex - Protective Dinosaur)
+You played Rex - Protective Dinosaur (cost 2)
+You played Alien - True Believer (cost 1)
+You quested with Merida - Defiant Daughter (+1 [LORE], 0 -> 1)
+You quested with Alien - True Believer (+1 [LORE], 1 -> 2)
+You gained 45 seconds (turn end)
+You ended your turn
+
+--- Turn 8 ---
+Opponent's turn begins
+Opponent's timer started (2:00)
+Ready step: cards readied
+Set step
+Draw step
+Opponent drew a card
+Opponent added Copper - Creative Storyteller to ink
+Opponent played Genie - Of the Lamp (cost 4)
+Opponent challenged Rex - Protective Dinosaur with Tod & Copper - Best of Friends
+Your timer started (2:00)
+Opponent challenged Rex - Protective Dinosaur with Tod & Copper - Best of Friends | 3 [STRENGTH] dealt 3 dmg to Rex - Protective Dinosaur (3/1 [WILLPOWER] - banished!), took 3 dmg (3/3 [WILLPOWER] - banished!)
+Tod & Copper - Best of Friends was banished (put into the discard from under it: Tod - All Alone)
+Rex - Protective Dinosaur was banished
+Rex - Protective Dinosaur's RUN AWAY! gains 1 [LORE] (2 -> 3)
+Opponent's timer started (0:40)
+Opponent challenged Alien - True Believer with Vixey - Forest Friend
+Opponent challenged Alien - True Believer with Vixey - Forest Friend | 1 [STRENGTH] dealt 1 dmg to Alien - True Believer (1/1 [WILLPOWER] - banished!), took 2 dmg (2/3 [WILLPOWER])
+Alien - True Believer was banished
+Opponent gained 45 seconds (turn end)
+Opponent ended their turn
+
+--- Turn 9 ---
+Your turn begins
+Your timer started (2:00)
+Ready step: cards readied
+Set step
+Draw step
+You drew Piercing Attack
+You played Woody - Helping a Friend (cost 4)
+You chose Rex - Protective Dinosaur (HANG ON!)
+You chose Rex - Protective Dinosaur (HANG ON!)
+You chose: Enter Ready (HANG ON!)
+Woody - Helping a Friend's HANG ON! chose "Enter Ready"
+Woody - Helping a Friend's HANG ON! Played Rex - Protective Dinosaur for free
+Woody - Helping a Friend's HANG ON! Returned Rex - Protective Dinosaur from discard to hand
+You played Rex - Protective Dinosaur (cost 2 → 0)
+You took back their action (free undo)
+You played Woody - Helping a Friend (cost 4)
+You chose Rex - Protective Dinosaur (HANG ON!)
+You chose Rex - Protective Dinosaur (HANG ON!)
+You chose: Enter Exerted (HANG ON!)
+Woody - Helping a Friend's HANG ON! chose "Enter Exerted"
+Woody - Helping a Friend's HANG ON! Played Rex - Protective Dinosaur for free
+Woody - Helping a Friend's HANG ON! Returned Rex - Protective Dinosaur from discard to hand
+You played Rex - Protective Dinosaur (cost 2 → 0)
+You quested with Merida - Defiant Daughter (+1 [LORE], 3 -> 4)
+You quested with Alien - True Believer (+1 [LORE], 4 -> 5)
+You gained 45 seconds (turn end)
+You ended your turn
+
+--- Turn 10 ---
+Opponent's turn begins
+Opponent's timer started (1:08)
+Ready step: cards readied
+Set step
+Draw step
+Opponent drew a card
+Opponent quested with Genie - Of the Lamp (+2 [LORE], 4 -> 6)
+Opponent played Dinky - Has the Brains (cost 2)
+Your timer started (2:00)
+You chose Alien - True Believer (GET HIM!)
+Opponent's timer started (0:31)
+Dinky - Has the Brains's GET HIM! deals 1 damage
+Dinky - Has the Brains dealt 1 damage to Alien - True Believer
+Alien - True Believer was banished
+Opponent challenged Rex - Protective Dinosaur with Vixey - Forest Friend
+Your timer started (1:32)
+Opponent challenged Rex - Protective Dinosaur with Vixey - Forest Friend | 3 [STRENGTH] dealt 3 dmg to Rex - Protective Dinosaur (3/1 [WILLPOWER] - banished!), took 3 dmg (5/3 [WILLPOWER] - banished!)
+Vixey - Forest Friend was banished
+Rex - Protective Dinosaur was banished
+Rex - Protective Dinosaur's RUN AWAY! gains 1 [LORE] (5 -> 6)
+Opponent's timer started (0:24)
+Opponent gained 45 seconds (turn end)
+Opponent ended their turn
+
+--- Turn 11 ---
+Your turn begins
+Your timer started (1:32)
+Ready step: cards readied
+Set step
+Draw step
+You drew Gaston - Superior Archer
+You added Gaston - Superior Archer to ink
+You played Woody - Jungle Guide (cost 5)
+You quested with Woody - Helping a Friend (+2 [LORE], 6 -> 8)
+You gained 45 seconds (turn end)
+You ended your turn
+
+--- Turn 12 ---
+Opponent's turn begins
+Opponent's timer started (1:08)
+Ready step: cards readied
+Set step
+Draw step
+Opponent drew a card
+Opponent played Strike a Good Match (cost 2)
+Opponent chose Widow Tweed - Kindly Soul (STRIKE A GOOD MATCH)
+Opponent discarded Widow Tweed - Kindly Soul
+Strike a Good Match's STRIKE A GOOD MATCH draws 2 cards
+Strike a Good Match's STRIKE A GOOD MATCH Discarded a card
+Opponent drew 2 cards
+Opponent played Copper - Hound Pup (cost 1)
+Copper - Hound Pup's FOUND YA looks at opponent's hand
+Opponent quested with Genie - Of the Lamp (+2 [LORE], 6 -> 8)
+Opponent quested with Dinky - Has the Brains (+2 [LORE], 8 -> 10)
+Opponent gained 45 seconds (turn end)
+Opponent ended their turn
+
+--- Turn 13 ---
+Your turn begins
+Your timer started (1:58)
+Ready step: cards readied
+Set step
+Draw step
+You drew Alien - True Believer
+You added Alien - True Believer to ink
+You played Elinor - Renowned Diplomat (cost 4)
+You played Piercing Attack (cost 2)
+You chose Genie - Of the Lamp (PIERCING ATTACK)
+Piercing Attack's PIERCING ATTACK deals 2 damage
+Piercing Attack dealt 2 damage to Genie - Of the Lamp
+You took back their action (free undo)
+You played Piercing Attack (cost 2)
+You chose Dinky - Has the Brains (PIERCING ATTACK)
+Piercing Attack's PIERCING ATTACK deals 2 damage
+Piercing Attack dealt 2 damage to Dinky - Has the Brains
+Dinky - Has the Brains was banished
+You quested with Woody - Jungle Guide (+2 [LORE], 8 -> 10)
+Woody - Jungle Guide's LET'S GET MOVIN' draws a card
+You drew You've Got a Friend in Me
+You quested with Woody - Helping a Friend (+2 [LORE], 10 -> 12)
+You quested with Merida - Defiant Daughter (+1 [LORE], 12 -> 13)
+You gained 45 seconds (turn end)
+You ended your turn
+Your timer started (2:00)
+You chose Copper - Hound Pup (COORDINATED EFFORTS)
+Elinor - Renowned Diplomat's COORDINATED EFFORTS deals 1 damage
+Elinor - Renowned Diplomat's COORDINATED EFFORTS gains 1 [LORE] (13 -> 14)
+Elinor - Renowned Diplomat's COORDINATED EFFORTS draws a card
+Elinor - Renowned Diplomat dealt 1 damage to Copper - Hound Pup
+You drew Woody - Waiting for a Friend
+Copper - Hound Pup was banished
+
+--- Turn 14 ---
+Opponent's turn begins
+Opponent's timer started (1:16)
+Ready step: cards readied
+Set step
+Draw step
+Opponent drew a card
+You: "Good game!"
+Opponent played Put That Thing Back (cost 4)
+Opponent chose Woody - Jungle Guide (PUT THAT THING BACK)
+Put That Thing Back's PUT THAT THING BACK returns Woody - Jungle Guide to hand
+Woody - Jungle Guide returned to your hand
+Opponent sang Education or Elimination with Genie - Of the Lamp
+Opponent chose: Draw and buff character (EDUCATION OR ELIMINATION)
+Opponent chose Genie - Of the Lamp (EDUCATION OR ELIMINATION)
+Education or Elimination's EDUCATION OR ELIMINATION draws a card
+Education or Elimination's EDUCATION OR ELIMINATION gives +1 [LORE] to Genie - Of the Lamp
+Opponent drew a card
+Opponent gained 45 seconds (turn end)
+Opponent ended their turn
+
+--- Turn 15 ---
+Your turn begins
+Your timer started (2:00)
+Ready step: cards readied
+Set step
+Draw step
+You drew Woody - Waiting for a Friend
+You played Woody - Waiting for a Friend (cost 1)
+Opponent: "Oops!"
+You shifted Woody - Jungle Guide onto Woody - Waiting for a Friend (Shift 3)
+Opponent: "Thanks!"
+You played Woody - Waiting for a Friend (cost 1)
+Opponent: "Good game!"
+You sang You've Got a Friend in Me with Elinor - Renowned Diplomat
+You chose RC - Remote-Controlled Car, RC - Remote-Controlled Car (YOU'VE GOT A FRIEND IN ME)
+You revealed RC - Remote-Controlled Car(YOU'VE GOT A FRIEND IN ME) - put into hand
+You revealed RC - Remote-Controlled Car(YOU'VE GOT A FRIEND IN ME) - put into hand
+You reordered 2 cards (YOU'VE GOT A FRIEND IN ME)
+You played RC - Remote-Controlled Car (cost 1)
+You quested with Woody - Helping a Friend (+2 [LORE], 14 -> 16)
+You quested with Merida - Defiant Daughter (+1 [LORE], 16 -> 17)
+You gained 45 seconds (turn end)
+You ended your turn
+Your timer started (2:00)
+You chose Genie - Of the Lamp (COORDINATED EFFORTS)
+Elinor - Renowned Diplomat's COORDINATED EFFORTS deals 1 damage
+Elinor - Renowned Diplomat's COORDINATED EFFORTS gains 1 [LORE] (17 -> 18)
+Elinor - Renowned Diplomat's COORDINATED EFFORTS draws a card
+Elinor - Renowned Diplomat dealt 1 damage to Genie - Of the Lamp
+You drew Merida - Gifted Archer
+
+--- Turn 16 ---
+Opponent's turn begins
+Opponent's timer started (1:06)
+Ready step: cards readied
+Set step
+Draw step
+Opponent drew a card
+Opponent added Tod - Clever Fox to ink
+Opponent played Tod & Copper - Best of Friends (cost 4)
+Opponent quested with Genie - Of the Lamp (+2 [LORE], 10 -> 12)
+Opponent gained 45 seconds (turn end)
+Opponent ended their turn
+
+--- Turn 17 ---
+Your turn begins
+Your timer started (2:00)
+Ready step: cards readied
+Set step
+Draw step
+You drew RC - Remote-Controlled Car
+You: "Surprise!"
+You quested with Merida - Defiant Daughter (+1 [LORE], 18 -> 19)
+You quested with Woody - Helping a Friend (+2 [LORE], 19 -> 21)
+You won with 21 [LORE]!
+You won with 21 [LORE]!
+Opponent: "Impressive!"

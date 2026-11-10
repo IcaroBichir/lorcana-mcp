@@ -51,19 +51,20 @@ That's it — Claude does the rest. Everything below is reference detail for whe
 
 ## Tools
 
-Thirteen tools are available in Claude once the server is running:
+Fourteen tools are available in Claude once the server is running:
 
 | Tool                  | What it does |
 |-----------------------|---|
 | `enrich_csv`          | Enriches a raw TCGPlayer export with Ink, Cost, Type, Subtypes, STR/WIL/Lore, Inkable, Keywords, and Abilities. Writes an enriched CSV and a dreamborn.ink-ready import file next to the input. `refresh_prices=True` also refreshes TCG Market Price with a live tcgcsv.com lookup. |
-| `lookup_card`         | Looks up any card by name. Returns full stats, ability text, format legality, and card image URL. |
+| `lookup_card`         | Looks up any card by name. Returns full stats, ability text, format legality (including the official ban list), and card image URL. `format="coconut"` looks up a Format Coconut card instead. |
 | `resolve_card`        | Fuzzy-resolves an informal, misspelled, or subtitle-less card name (e.g. "goofy musketeer", "elsa"). Returns a single confident match, a ranked top-3 to disambiguate, or nothing found. |
 | `list_printings`      | Lists every printing of a card — or every card sharing a character name — side by side: set, number(s), cost, stats, rarity, per-format legality, and cheapest market price. Optional `fmt` adds a ✓/✗ legality column. For "which printing of X is Core-legal / cheapest?". |
 | `search_cards`        | Searches the full card pool by color, type, rarity, set, cost range, keyword, ability text, or subtype — with pagination. |
 | `find_song_synergies` | Finds every character that can sing a given song (or a raw cost threshold), split into Singer-keyword discount picks and plain cost-qualifiers. Optionally flags which ones you own. |
 | `filter_collection`   | Filters your collection to cards legal in a given format: `core`, `infinity`, `core_zh`, `core_ja`, or `poorcana`. |
 | `audit_csv`           | Compares an enriched collection against live API data and reports any stale or wrong fields. |
-| `analyze_deck`        | Analyzes a raw deck list (`4x Card Name` per line) for ink curve, inkable split, color split, card types, estimated lore/turn, and Core Constructed legality (60-card min, max 4 copies, ≤2 ink colors). |
+| `analyze_deck`        | Analyzes a raw deck list (`4x Card Name` per line) for ink curve, inkable split, color split, card types, estimated lore/turn, and Core Constructed legality (60-card min, max 4 copies, ≤2 ink colors, no banned cards). |
+| `analyze_game_log`    | Reviews a game from its pasted **duels.ink game log**: turn-by-turn ink, plays and lore race, the opponent's inks and closest known list, key moments, and tips (missed or unspent ink, questing into a challenge, threats left alive too long, damage-sweeper exposure, ink choice). Pass your deck list or deck file for deck-specific tips. |
 | `what_am_i_missing`   | Compares a deck list against your collection: what you already own, what's missing or short, and a live TCGPlayer cost estimate (via tcgcsv.com) to complete it. |
 | `build_deck`          | Automatically assembles a legal, curve-balanced ~60-card decklist for an ink pair/format, in one of 3 modes: `collection` (only cards you own), `ideal` (best deck regardless of ownership, priced to complete if you pass a collection CSV), or `market` (best deck, fully priced, ignoring ownership). Also builds for `format="coconut"` — Ravensburger's multiplayer singleton beta (up to 3 ink colors, 1 copy of everything except your chosen Coconut's associated character at up to 4). Pass `theme` (a classification like `"princess"`/`"detective"`, or a character name) to build a tribal deck — inks are auto-picked if you omit them — and `include_preview=True` to use cards from an announced set before it's legal. A heuristic curve/keyword-value builder, not a synergy/combo detector. |
 | `build_sealed_deck`   | Builds the best 40-card **Sealed / prerelease** deck from an opened card pool (6 packs, ~72 cards). Takes one card per line — names (informal/misspelled is fine) or the collector numbers printed on the cards (`123`, `123/204`), so a photo of the pool can be transcribed by your MCP client and passed straight in. Sealed rules: 40-card minimum, no ink limit, no copy limit. Ranks every ink pair by pool depth, builds around the deepest one, splashes extra inks only when needed to reach 40, and lists the best sideboard cards plus any ambiguous/unrecognized lines (never guessed). |
@@ -231,6 +232,16 @@ Accepts `4x Card Name` or `4 Card Name`; quantity defaults to 1 if omitted. Line
 
 Returns: ink curve (1-2/3-4/5-6/7+ cost brackets), inkable vs. uninkable count, color split, card type split, an estimated lore-per-turn (sum of Character lore values), a Core Constructed legality check (60-card minimum, max 4 copies of any card, at most 2 ink colors), and any card names that couldn't be resolved.
 
+### Review a duels.ink game
+
+> "Here's my duels.ink game log, what did I do wrong?" (paste the whole log)
+
+> "Review this game. I was on my Toy Tribal deck: decks/toy_tribal.md"
+
+In duels.ink, open the in-game log panel after the match and copy everything. Paste it as is. It works with one event per line and with the run-together single line some copies produce. "You" in the log is you.
+
+The review replays the game: lore, ink and both boards, your hand (from your own draws), and every banish with its cause. "Free undo" steps are rolled back first. You get a per-turn table (ink inked, cards played with ink paid vs. available, songs, quests, lore), the opponent's inks and the cards they showed, the closest known tournament list in their inks, the key moments, and a numbered list of tips. Pass `deck_list` or `deck_path` to also check the game against your deck (low-count payoffs you inked, 3–4-ofs that never showed up, cards that aren't in the list). The opponent's hand is hidden and duels.ink doesn't itemise activated-ability or ink-drop payments, so treat the tips as things to check, not verdicts.
+
 ### Check what a deck list is missing
 
 > "What am I missing to build this deck?" (paste the deck list and point me at your collection CSV)
@@ -380,6 +391,8 @@ If you're an AI agent (Claude or otherwise) with this MCP server connected, read
 | "What do I need to buy to finish this deck, and how much?" | `what_am_i_missing` | — |
 | "Build me a [princess / detective / Stitch] deck" | `build_deck(theme=...)` — omit `ink_colors` to auto-pick the best pair, or pass the user's inks | filtering `search_cards` by subtype and assembling by hand |
 | "Build me a deck for [ink pair]" | `build_deck` — ask which of the 3 modes (`collection`/`ideal`/`market`) first if the user hasn't said | manually assembling a decklist from `search_cards` results |
+| "Review my game" / a pasted duels.ink game log | `analyze_game_log` — if you don't know which deck they were on, ask, then pass `deck_list` or `deck_path` | reading the log by hand |
+| A Format Coconut card's real ability ("what does the Robin Hood Coconut do?") | `lookup_card(name, format="coconut")` | plain `lookup_card` — four Coconut names collide with unrelated printed cards |
 | "Here's my prerelease / sealed pool" (a list or a photo of opened cards) | `build_sealed_deck` — for a photo, read each card's collector number (or name) into one line per card, then confirm any ambiguous/unrecognized lines with the user | `build_deck` (Constructed rules: 60 cards, 4-copy limit, 2 inks) |
 
 ### Hard rules
