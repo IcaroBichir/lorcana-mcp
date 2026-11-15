@@ -153,7 +153,10 @@ class TestLossGame:
         assert "T12 Woody - Jungle Guide" in tip
 
     def test_no_wrong_ink_archetype_guess(self, r):
-        assert r["opp_guess"] is None
+        # A guess is fine (DLC London added an Amethyst/Steel list); it must
+        # just never come from a different ink pair.
+        if r["opp_guess"] is not None:
+            assert r["opp_guess"][0].startswith("Amethyst / Steel")
         assert set(r["opp_colors"][:2]) == {"Amethyst", "Steel"}
 
     def test_rendered_review(self, r):
