@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from .tournaments import TOURNAMENTS, format_event, list_events
 
-META_SNAPSHOT_DATE = "2026-11-10"
+META_SNAPSHOT_DATE = "2026-11-16"
 
 META_SOURCES = [
     "inkDecks.com Core Constructed meta report, November 2026 (Hyperia City era): "

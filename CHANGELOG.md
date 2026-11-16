@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.8.0 — 2026-11-16
 
 **Illumineer's Quest cards are recognized, and quest-only cards are a new classification.** TCGPlayer lists cards from the co-op boxes (e.g. *The Great Hunny Rescue*) under their own `Illumineer's Quest: …` set. `enrich_csv` used to leave them all blank as "unmatched". Now each row is classified:
 - **Player-deck cards, including the alt-art cold foils** (Mr. Incredible - Super Strong 243/204, Christopher Robin - Hunny Sage, Sven - Leaping Reindeer, Violet Parr - Super Resilient, …) are reprints of regular cards and tournament-legal. They get the regular printing's data, `filter_collection` gives them that printing's legality, and they count as owned for `build_deck`, `what_am_i_missing` and `find_song_synergies`.
