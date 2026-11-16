@@ -11,7 +11,7 @@ from .api import (
     fetch_duels_ink, build_duels_lookup, DUELS_FORMAT_LABELS, lj_card_format_legal,
     fetch_lorcana_json, fetch_lorcana_sets, filter_cards, filter_by_format,
     _card_colors, resolve_card as _resolve_card,
-    singer_value, is_song, find_song_singers, is_quest_only_set,
+    singer_value, is_song, find_song_singers, is_quest_set, is_quest_only_row,
     fetch_tcgcsv_prices, cheapest_price_for_card,
     fetch_format_coconut_cards, resolve_coconut_card,
     is_banned, banned_formats, card_full_name, BAN_LIST_DATE,
@@ -67,8 +67,9 @@ def _load_collection_csv(csv_path: str) -> tuple[dict[str, int], dict[str, float
     prices: dict[str, float] = {}
     with open(csv_path, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
-            # Illumineer's Quest copies are quest-only: never owned for deck building.
-            if is_quest_only_set(row.get("Set Name", "")):
+            # Quest-only Illumineer's Quest cards (scenario deck, tokens) are
+            # never owned for deck building; player-deck reprints count.
+            if is_quest_only_row(row):
                 continue
             name = _PROMO_SUFFIX_RE.sub("", row.get("Product Name", "")).strip()
             if not name:
@@ -177,10 +178,12 @@ def enrich_csv(input_path: str, cache_path: str = "", refresh_prices: bool = Fal
     dreamborn.ink-importable `(Set Number, Card Number)` row when this
     server's built-in promo table covers that card; promos it doesn't
     recognize are listed for manual entry rather than guessed. Illumineer's
-    Quest rows (co-op box cards, set "Illumineer's Quest: ...") are
-    classified quest-only: alt-art foils get their regular printing's stats,
-    but they're listed separately, left out of the dreamborn file, and never
-    counted as owned or legal in Core, Infinity, Coconut or Poorcana. `cache_path`
+    Quest rows (co-op box cards, set "Illumineer's Quest: ...") are listed in
+    their own table for manual dreamborn entry. Player-deck cards (incl. the
+    alt-art foils) are reprints: they get the regular printing's data and
+    count as normal, legal copies. Scenario/villain deck cards, Vinelings and
+    tokens have no regular printing: they're classified quest-only (blank card
+    data, never owned or legal in Core, Infinity, Coconut or Poorcana). `cache_path`
     only skips re-fetching for card names already present in that prior
     enriched CSV — it does not skip enrichment for new cards in the input.
 
@@ -237,14 +240,16 @@ def enrich_csv(input_path: str, cache_path: str = "", refresh_prices: bool = Fal
 
     quest_block = ""
     if result.get("quest_only"):
-        rows = [f"| {q['num']} | {q['name']} | {q['set']} | {q['printing']} | {q['count']} |"
+        rows = [f"| {q['num']} | {q['name']} | {q['printing']} | {q['count']} | "
+                f"{'playable reprint' if q['playable'] else 'quest-only'} |"
                 for q in result["quest_only"]]
         quest_block = (
-            "\n\nQuest-only cards (Illumineer's Quest co-op box; not playable in Core, "
-            "Infinity, Coconut or other regular formats, not counted as owned for deck "
-            "building, left out of the dreamborn file):\n"
-            "| # | Name | Set | Printing | Qty |\n"
-            "|---|------|-----|----------|-----|\n" +
+            "\n\nIllumineer's Quest cards (add manually in dreamborn.ink). Player-deck "
+            "reprints count as normal legal copies. Quest-only cards (scenario deck, "
+            "Vinelings, tokens) are not playable in Core, Infinity, Coconut or other "
+            "regular formats and are never counted as owned:\n"
+            "| # | Name | Printing | Qty | Status |\n"
+            "|---|------|----------|-----|--------|\n" +
             "\n".join(rows)
         )
 
@@ -948,8 +953,9 @@ def filter_collection(csv_path: str, format: str = "core") -> str:
 
     Behavior: promo rows (Set Name == "Disney Lorcana Promo Cards") are always
     excluded from Core/Infinity/regional results, not flagged as illegal.
-    Illumineer's Quest rows (co-op box cards) are quest-only and are excluded
-    from every format, Poorcana included. Promos are skipped because
+    Illumineer's Quest player-deck reprints take the legality of the regular
+    printing with the same name. Quest-only Illumineer's Quest cards (scenario
+    deck, tokens) are excluded from every format, Poorcana included. Promos are skipped because
     duels.ink's legality table is keyed by (set, number) and promos don't map
     onto that cleanly (see "Promo cards" in the reference doc). Any other row
     duels.ink doesn't recognize (usually a card from a set duels.ink hasn't
@@ -993,6 +999,7 @@ def filter_collection(csv_path: str, format: str = "core") -> str:
         return f"Failed to fetch duels.ink data: {e}"
 
     duels = build_duels_lookup(duels_cards)
+    duels_by_name = {c.get("fullName", "").lower(): c for c in duels_cards if c.get("fullName")}
     format_label = DUELS_FORMAT_LABELS.get(fmt, fmt)
 
     legal_rows = []
@@ -1000,15 +1007,18 @@ def filter_collection(csv_path: str, format: str = "core") -> str:
 
     for row in rows:
         set_name = row.get("Set Name", "").strip()
-        if set_name == "Disney Lorcana Promo Cards" or is_quest_only_set(set_name):
+        if set_name == "Disney Lorcana Promo Cards" or is_quest_only_row(row):
             continue
-        num_i = _num_int(row.get("Number", ""))
-        set_code = SETNAME_TO_LJCODE.get(set_name)
-        if not set_code or num_i is None:
-            not_found += 1
-            continue
-
-        duels_card = duels.get((set_code, num_i))
+        if is_quest_set(set_name):
+            # Player-deck reprint: legal wherever the regular printing is.
+            duels_card = duels_by_name.get(row.get("Product Name", "").strip().lower())
+        else:
+            num_i = _num_int(row.get("Number", ""))
+            set_code = SETNAME_TO_LJCODE.get(set_name)
+            if not set_code or num_i is None:
+                not_found += 1
+                continue
+            duels_card = duels.get((set_code, num_i))
         if duels_card is None:
             not_found += 1
             continue
@@ -1064,7 +1074,7 @@ def _filter_poorcana(rows: list[dict]) -> str:
     legal_rarities = {"Common", "Uncommon"}
     legal_rows = []
     for row in rows:
-        if is_quest_only_set(row.get("Set Name", "")):
+        if is_quest_only_row(row):
             continue
         rarity = row.get("Rarity", "").strip()
         if rarity not in legal_rarities:

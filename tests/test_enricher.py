@@ -317,25 +317,30 @@ class TestEnrichCsvRefreshPrices:
         assert rows[0]["TCG Market Price"] == "3.00"
 
 
-# ── Illumineer's Quest (quest-only) rows ───────────────────────────────────────
+# ── Illumineer's Quest rows: playable reprints vs quest-only cards ─────────────
 
 _IQ = "Illumineer's Quest: The Great Hunny Rescue"
+_FOIL = {"Set Name": _IQ, "Number": "243/204", "Printing": "Cold Foil", "Add to Quantity": "1",
+         "Product Name": "Mr. Incredible - Super Strong", "Ink": "Ruby", "Card Type": "Character",
+         "Rarity": "Common"}
+_VINE = {"Set Name": _IQ, "Number": "7/37", "Printing": "Normal", "Add to Quantity": "1",
+         "Product Name": "Yzma - Made by the Vine", "Ink": "", "Card Type": "", "Rarity": "Common"}
 
 
-class TestQuestOnly:
-    def test_set_classification(self):
-        from lorcana_mcp.api import is_quest_only_set
-        assert is_quest_only_set(_IQ)
-        assert is_quest_only_set("Illumineer's Quest: Deep Trouble")
-        assert not is_quest_only_set("Hyperia City")
-        assert not is_quest_only_set("")
+class TestQuestCards:
+    def test_set_and_row_classification(self):
+        from lorcana_mcp.api import is_quest_set, is_quest_only_row
+        assert is_quest_set(_IQ) and is_quest_set("Illumineer's Quest: Deep Trouble")
+        assert not is_quest_set("Hyperia City") and not is_quest_set("")
+        assert not is_quest_only_row(_FOIL)
+        assert is_quest_only_row(_VINE)
+        assert not is_quest_only_row({"Set Name": "Hyperia City", "Card Type": ""})
 
-    def test_left_out_of_dreamborn_and_listed(self):
-        rows = [{"Set Name": _IQ, "Number": "243/204", "Printing": "Cold Foil",
-                 "Add to Quantity": "1", "Product Name": "Mr. Incredible - Super Strong", "Ink": "Ruby"}]
-        result = _build_dreamborn_rows(rows)
+    def test_listed_for_manual_dreamborn_entry(self):
+        result = _build_dreamborn_rows([_FOIL, _VINE])
         assert result["rows"] == []
-        assert result["quest"][0]["name"] == "Mr. Incredible - Super Strong"
+        status = {q["name"]: q["playable"] for q in result["quest"]}
+        assert status == {"Mr. Incredible - Super Strong": True, "Yzma - Made by the Vine": False}
 
     def test_foil_borrows_regular_printing_stats(self):
         from lorcana_mcp.enricher import _resolve_quest
@@ -345,25 +350,27 @@ class TestQuestOnly:
         out = _resolve_quest(_IQ, "243", "Mr. Incredible - Super Strong", lj, unmatched)
         assert out[0] == "Ruby" and str(out[1]) == "5" and not unmatched
 
-    def test_boss_card_unmatched(self):
+    def test_vine_card_reported_quest_only(self):
         from lorcana_mcp.enricher import _resolve_quest
         unmatched = []
         _resolve_quest(_IQ, "7", "Yzma - Made by the Vine", [], unmatched)
         assert "quest-only" in unmatched[0]
 
-    def test_not_in_poorcana(self):
-        result = _filter_poorcana([_row(**{"Set Name": _IQ})])
-        assert "No Common or Uncommon" in result
+    def test_poorcana(self):
+        assert "1 unique" in _filter_poorcana([_FOIL]) or "Mr. Incredible" in _filter_poorcana([_FOIL])
+        assert "No Common or Uncommon" in _filter_poorcana([_VINE])
 
-    def test_not_counted_as_owned(self, tmp_path):
+    def test_owned_counts(self, tmp_path):
         from lorcana_mcp.server import _load_collection_csv
         p = tmp_path / "c.csv"
+        cols = ["Set Name", "Product Name", "Card Type", "Add to Quantity", "TCG Market Price"]
         with open(p, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=["Set Name", "Product Name", "Add to Quantity", "TCG Market Price"])
+            w = csv.DictWriter(f, fieldnames=cols)
             w.writeheader()
             w.writerow({"Set Name": "Wilds Unknown", "Product Name": "Mr. Incredible - Super Strong",
-                        "Add to Quantity": "3", "TCG Market Price": "1.00"})
-            w.writerow({"Set Name": _IQ, "Product Name": "Mr. Incredible - Super Strong",
-                        "Add to Quantity": "1", "TCG Market Price": "7.53"})
+                        "Card Type": "Character", "Add to Quantity": "3", "TCG Market Price": "1.00"})
+            w.writerow({k: _FOIL.get(k, "7.53") for k in cols})
+            w.writerow({k: _VINE.get(k, "0.50") for k in cols})
         counts, _ = _load_collection_csv(str(p))
-        assert counts["mr. incredible - super strong"] == 3
+        assert counts["mr. incredible - super strong"] == 4
+        assert "yzma - made by the vine" not in counts

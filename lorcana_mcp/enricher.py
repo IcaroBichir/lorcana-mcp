@@ -7,7 +7,7 @@ from pathlib import Path
 from .api import (
     ENRICH_FIELDS, OUT_COLS, SETNAME_TO_LJCODE, PROMO_SETCODE, LJ_ONLY_SETS,
     enrich_from_api, enrich_from_lj, pick_lj_card, load_all_data,
-    fetch_tcgcsv_prices, resolve_promo_dreamborn_row, is_quest_only_set,
+    fetch_tcgcsv_prices, resolve_promo_dreamborn_row, is_quest_set, is_quest_only_row,
 )
 
 _BLANK = ("", "", "", "", "", "", "", "", "", "")
@@ -167,7 +167,7 @@ def _resolve(
     if set_name == "Disney Lorcana Promo Cards":
         return _resolve_promo(name, num_i, lj_lookup, lj_cards, unmatched)
 
-    if is_quest_only_set(set_name):
+    if is_quest_set(set_name):
         return _resolve_quest(set_name, num_s, name, lj_cards, unmatched)
 
     if set_name in LJ_ONLY_SETS or set_name not in SET_NUM:
@@ -254,10 +254,13 @@ def _build_dreamborn_rows(enriched_rows: list[dict]) -> dict:
         except ValueError:
             count = 0
 
-        if is_quest_only_set(set_name):
+        if is_quest_set(set_name):
+            # No known dreamborn numbering for Illumineer's Quest prints: list
+            # them (playable reprint or quest-only) instead of guessing a row.
             if count > 0:
                 quest.append({"num": row.get("Number", "").strip(), "name": name,
-                              "set": set_name, "printing": printing, "count": count})
+                              "set": set_name, "printing": printing, "count": count,
+                              "playable": not is_quest_only_row(row)})
             continue
 
         if set_name == "Disney Lorcana Promo Cards":
@@ -317,7 +320,7 @@ def audit_csv(csv_path: str) -> dict:
         num_i = _num_int(row.get("Number", ""))
         name = row.get("Product Name", "").strip()
 
-        if set_name == "Disney Lorcana Promo Cards" or is_quest_only_set(set_name):
+        if set_name == "Disney Lorcana Promo Cards" or is_quest_set(set_name):
             skipped += 1
             continue
 

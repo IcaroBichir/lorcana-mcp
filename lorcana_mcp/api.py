@@ -53,20 +53,28 @@ LJCODE_TO_SETNAME: dict[str, str] = {v: k for k, v in SETNAME_TO_LJCODE.items()}
 LJ_ONLY_SETS = {"Wilds Unknown", "Attack of the Vine!", "Hyperia City"}
 
 # Illumineer's Quest boxes (Deep Trouble, Palace Heist, The Great Hunny Rescue, ...)
-# are co-op board-game products. TCGPlayer lists their cards under their own
-# "Illumineer's Quest: <name>" set, and those copies are classified QUEST-ONLY:
-# they are not counted as playable in Core, Infinity, Coconut or any other
-# regular format. That covers the boss/vine cards (numbered x/37) and the
-# alt-art cold foils in the player decks (e.g. Mr. Incredible - Super Strong
-# 243/204). The foils still get the stats of the regular printing they share a
-# name with, so the collection reads correctly. To count the foils as playable
-# again, change this one function.
+# are co-op products. TCGPlayer lists their cards under their own
+# "Illumineer's Quest: <name>" set. Two kinds of card live there:
+#   * player-deck cards, including the alt-art cold foils (e.g. Mr. Incredible -
+#     Super Strong 243/204). These are reprints of regular cards and are legal
+#     wherever the regular printing is, so they count as normal copies.
+#   * the Vine/villain scenario deck, bosses, Vinelings and tokens (numbered
+#     x/37). These are QUEST-ONLY: not legal in Core, Infinity, Coconut or any
+#     other regular format.
+# A row is told apart by whether a regular printing shares its full name: the
+# enricher fills its card data from that printing, and leaves a quest-only card blank.
 QUEST_SET_PREFIX = "Illumineer's Quest"
 
 
-def is_quest_only_set(set_name: str) -> bool:
+def is_quest_set(set_name: str) -> bool:
     """True for TCGPlayer set names of Illumineer's Quest co-op products."""
     return (set_name or "").strip().startswith(QUEST_SET_PREFIX)
+
+
+def is_quest_only_row(row: dict) -> bool:
+    """True for an enriched collection row that is a quest-only card: an
+    Illumineer's Quest row with no regular printing (blank Card Type)."""
+    return is_quest_set(row.get("Set Name", "")) and not (row.get("Card Type") or "").strip()
 
 
 # Promo card name → LorcanaJSON setCode where the promo entry lives
