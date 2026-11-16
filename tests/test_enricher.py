@@ -315,3 +315,55 @@ class TestEnrichCsvRefreshPrices:
         with open(result["enriched_path"]) as f:
             rows = list(csv.DictReader(f))
         assert rows[0]["TCG Market Price"] == "3.00"
+
+
+# ── Illumineer's Quest (quest-only) rows ───────────────────────────────────────
+
+_IQ = "Illumineer's Quest: The Great Hunny Rescue"
+
+
+class TestQuestOnly:
+    def test_set_classification(self):
+        from lorcana_mcp.api import is_quest_only_set
+        assert is_quest_only_set(_IQ)
+        assert is_quest_only_set("Illumineer's Quest: Deep Trouble")
+        assert not is_quest_only_set("Hyperia City")
+        assert not is_quest_only_set("")
+
+    def test_left_out_of_dreamborn_and_listed(self):
+        rows = [{"Set Name": _IQ, "Number": "243/204", "Printing": "Cold Foil",
+                 "Add to Quantity": "1", "Product Name": "Mr. Incredible - Super Strong", "Ink": "Ruby"}]
+        result = _build_dreamborn_rows(rows)
+        assert result["rows"] == []
+        assert result["quest"][0]["name"] == "Mr. Incredible - Super Strong"
+
+    def test_foil_borrows_regular_printing_stats(self):
+        from lorcana_mcp.enricher import _resolve_quest
+        lj = [{"fullName": "Mr. Incredible - Super Strong", "color": "Ruby", "cost": 5,
+               "type": "Character", "strength": 5, "willpower": 5, "lore": 2, "inkwell": True}]
+        unmatched = []
+        out = _resolve_quest(_IQ, "243", "Mr. Incredible - Super Strong", lj, unmatched)
+        assert out[0] == "Ruby" and str(out[1]) == "5" and not unmatched
+
+    def test_boss_card_unmatched(self):
+        from lorcana_mcp.enricher import _resolve_quest
+        unmatched = []
+        _resolve_quest(_IQ, "7", "Yzma - Made by the Vine", [], unmatched)
+        assert "quest-only" in unmatched[0]
+
+    def test_not_in_poorcana(self):
+        result = _filter_poorcana([_row(**{"Set Name": _IQ})])
+        assert "No Common or Uncommon" in result
+
+    def test_not_counted_as_owned(self, tmp_path):
+        from lorcana_mcp.server import _load_collection_csv
+        p = tmp_path / "c.csv"
+        with open(p, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=["Set Name", "Product Name", "Add to Quantity", "TCG Market Price"])
+            w.writeheader()
+            w.writerow({"Set Name": "Wilds Unknown", "Product Name": "Mr. Incredible - Super Strong",
+                        "Add to Quantity": "3", "TCG Market Price": "1.00"})
+            w.writerow({"Set Name": _IQ, "Product Name": "Mr. Incredible - Super Strong",
+                        "Add to Quantity": "1", "TCG Market Price": "7.53"})
+        counts, _ = _load_collection_csv(str(p))
+        assert counts["mr. incredible - super strong"] == 3

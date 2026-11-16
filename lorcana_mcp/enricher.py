@@ -7,7 +7,7 @@ from pathlib import Path
 from .api import (
     ENRICH_FIELDS, OUT_COLS, SETNAME_TO_LJCODE, PROMO_SETCODE, LJ_ONLY_SETS,
     enrich_from_api, enrich_from_lj, pick_lj_card, load_all_data,
-    fetch_tcgcsv_prices, resolve_promo_dreamborn_row,
+    fetch_tcgcsv_prices, resolve_promo_dreamborn_row, is_quest_only_set,
 )
 
 _BLANK = ("", "", "", "", "", "", "", "", "", "")
@@ -154,6 +154,7 @@ def enrich_csv(
         "unmatched": unmatched,
         "dreamborn_rows": len(dreamborn_rows["rows"]),
         "promo_skipped": dreamborn_rows["promos"],
+        "quest_only": dreamborn_rows["quest"],
         "fill_rates": fill,
         "prices_refreshed": prices_refreshed if refresh_prices else None,
     }
@@ -165,6 +166,9 @@ def _resolve(
 ) -> tuple:
     if set_name == "Disney Lorcana Promo Cards":
         return _resolve_promo(name, num_i, lj_lookup, lj_cards, unmatched)
+
+    if is_quest_only_set(set_name):
+        return _resolve_quest(set_name, num_s, name, lj_cards, unmatched)
 
     if set_name in LJ_ONLY_SETS or set_name not in SET_NUM:
         return _resolve_lj_only(set_name, num_s, num_i, name, lj_lookup, unmatched)
@@ -197,6 +201,19 @@ def _resolve_promo(
     return _BLANK
 
 
+def _resolve_quest(
+    set_name: str, num_s: str, name: str, lj_cards: list, unmatched: list,
+) -> tuple:
+    """Illumineer's Quest row: borrow the stats of the regular printing with the
+    same full name (the alt-art foils). Quest-only cards with no regular
+    printing (bosses, vines) stay blank and are listed as unmatched."""
+    matches = [c for c in lj_cards if c.get("fullName", "").lower() == name.lower()]
+    if matches:
+        return enrich_from_lj(matches[0])
+    unmatched.append(f"[{set_name} #{num_s}] {name} (quest-only card, no regular printing)")
+    return _BLANK
+
+
 def _resolve_lj_only(
     set_name: str, num_s: str, num_i: int | None,
     name: str, lj_lookup: dict, unmatched: list,
@@ -224,6 +241,7 @@ def _fill_rates(rows: list[dict]) -> dict:
 def _build_dreamborn_rows(enriched_rows: list[dict]) -> dict:
     rows = []
     promos = []
+    quest = []
     for row in enriched_rows:
         set_name = row.get("Set Name", "").strip()
         num_str = row.get("Number", "").strip().split("/")[0].strip()
@@ -235,6 +253,12 @@ def _build_dreamborn_rows(enriched_rows: list[dict]) -> dict:
             count = int(float(count_str)) if count_str else 0
         except ValueError:
             count = 0
+
+        if is_quest_only_set(set_name):
+            if count > 0:
+                quest.append({"num": row.get("Number", "").strip(), "name": name,
+                              "set": set_name, "printing": printing, "count": count})
+            continue
 
         if set_name == "Disney Lorcana Promo Cards":
             if count <= 0:
@@ -267,7 +291,7 @@ def _build_dreamborn_rows(enriched_rows: list[dict]) -> dict:
             "Variant": "foil" if printing.lower() in ("holofoil", "cold foil") else "normal",
             "Count": count,
         })
-    return {"rows": rows, "promos": promos}
+    return {"rows": rows, "promos": promos, "quest": quest}
 
 # ── Audit ──────────────────────────────────────────────────────────────────────
 
@@ -293,7 +317,7 @@ def audit_csv(csv_path: str) -> dict:
         num_i = _num_int(row.get("Number", ""))
         name = row.get("Product Name", "").strip()
 
-        if set_name == "Disney Lorcana Promo Cards":
+        if set_name == "Disney Lorcana Promo Cards" or is_quest_only_set(set_name):
             skipped += 1
             continue
 
