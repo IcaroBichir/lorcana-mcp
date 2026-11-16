@@ -8,6 +8,7 @@ from .api import (
     ENRICH_FIELDS, OUT_COLS, SETNAME_TO_LJCODE, PROMO_SETCODE, LJ_ONLY_SETS,
     enrich_from_api, enrich_from_lj, pick_lj_card, load_all_data,
     fetch_tcgcsv_prices, resolve_promo_dreamborn_row, is_quest_set, is_quest_only_row,
+    fetch_lorcana_json,
 )
 
 _BLANK = ("", "", "", "", "", "", "", "", "", "")
@@ -137,7 +138,10 @@ def enrich_csv(
         writer.writeheader()
         writer.writerows(out_rows)
 
-    dreamborn_rows = _build_dreamborn_rows(out_rows)
+    quest_lj = lj_cards
+    if not quest_lj and any(is_quest_set(r.get("Set Name", "")) for r in out_rows):
+        quest_lj = fetch_lorcana_json()  # cache-hit run: still need set/number for reprints
+    dreamborn_rows = _build_dreamborn_rows(out_rows, quest_lj)
     with open(dreamborn_out, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["Set Number", "Card Number", "Variant", "Count"])
         writer.writeheader()
@@ -238,7 +242,25 @@ def _fill_rates(rows: list[dict]) -> dict:
 
 # ── Dreamborn generation ───────────────────────────────────────────────────────
 
-def _build_dreamborn_rows(enriched_rows: list[dict]) -> dict:
+def _quest_dreamborn_row(name: str, num_str: str, lj_cards: list) -> tuple[int, int] | None:
+    """dreamborn files an Illumineer's Quest player-deck reprint under the set
+    and number printed on the card (e.g. Mr. Incredible - Super Strong 243/204
+    from The Great Hunny Rescue is Wilds Unknown #243). LorcanaJSON has that
+    exact (setCode, number) entry, so require a match on both name and number."""
+    try:
+        num = int(num_str)
+    except ValueError:
+        return None
+    for c in lj_cards or []:
+        if c.get("fullName", "").lower() == name.lower() and c.get("number") == num:
+            try:
+                return int(c.get("setCode")), num
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
+def _build_dreamborn_rows(enriched_rows: list[dict], lj_cards: list | None = None) -> dict:
     rows = []
     promos = []
     quest = []
@@ -255,12 +277,21 @@ def _build_dreamborn_rows(enriched_rows: list[dict]) -> dict:
             count = 0
 
         if is_quest_set(set_name):
-            # No known dreamborn numbering for Illumineer's Quest prints: list
-            # them (playable reprint or quest-only) instead of guessing a row.
-            if count > 0:
-                quest.append({"num": row.get("Number", "").strip(), "name": name,
-                              "set": set_name, "printing": printing, "count": count,
-                              "playable": not is_quest_only_row(row)})
+            if count <= 0:
+                continue
+            playable = not is_quest_only_row(row)
+            db = _quest_dreamborn_row(name, num_str, lj_cards) if playable else None
+            if db:
+                rows.append({
+                    "Set Number": db[0],
+                    "Card Number": db[1],
+                    "Variant": "foil" if printing.lower() in ("holofoil", "cold foil") else "normal",
+                    "Count": count,
+                })
+            quest.append({"num": row.get("Number", "").strip(), "name": name,
+                          "set": set_name, "printing": printing, "count": count,
+                          "playable": playable,
+                          "dreamborn": f"{db[0]}, {db[1]}" if db else ""})
             continue
 
         if set_name == "Disney Lorcana Promo Cards":

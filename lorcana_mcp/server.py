@@ -179,9 +179,9 @@ def enrich_csv(input_path: str, cache_path: str = "", refresh_prices: bool = Fal
     server's built-in promo table covers that card; promos it doesn't
     recognize are listed for manual entry rather than guessed. Illumineer's
     Quest rows (co-op box cards, set "Illumineer's Quest: ...") are listed in
-    their own table for manual dreamborn entry. Player-deck cards (incl. the
-    alt-art foils) are reprints: they get the regular printing's data and
-    count as normal, legal copies. Scenario/villain deck cards, Vinelings and
+    their own table. Player-deck cards (incl. the alt-art foils) are reprints:
+    they get the regular printing's data, count as normal legal copies, and go
+    into the dreamborn file under the set/number printed on the card. Scenario/villain deck cards, Vinelings and
     tokens have no regular printing: they're classified quest-only (blank card
     data, never owned or legal in Core, Infinity, Coconut or Poorcana). `cache_path`
     only skips re-fetching for card names already present in that prior
@@ -241,15 +241,17 @@ def enrich_csv(input_path: str, cache_path: str = "", refresh_prices: bool = Fal
     quest_block = ""
     if result.get("quest_only"):
         rows = [f"| {q['num']} | {q['name']} | {q['printing']} | {q['count']} | "
-                f"{'playable reprint' if q['playable'] else 'quest-only'} |"
+                f"{'playable reprint' if q['playable'] else 'quest-only'} | "
+                f"{q.get('dreamborn') or 'add manually'} |"
                 for q in result["quest_only"]]
         quest_block = (
-            "\n\nIllumineer's Quest cards (add manually in dreamborn.ink). Player-deck "
-            "reprints count as normal legal copies. Quest-only cards (scenario deck, "
-            "Vinelings, tokens) are not playable in Core, Infinity, Coconut or other "
-            "regular formats and are never counted as owned:\n"
-            "| # | Name | Printing | Qty | Status |\n"
-            "|---|------|----------|-----|--------|\n" +
+            "\n\nIllumineer's Quest cards. Player-deck reprints count as normal legal "
+            "copies and go into the dreamborn file under the set and number printed on "
+            "the card. Quest-only cards (scenario deck, Vinelings, tokens) are not "
+            "playable in Core, Infinity, Coconut or other regular formats and are never "
+            "counted as owned:\n"
+            "| # | Name | Printing | Qty | Status | dreamborn (Set, Card) |\n"
+            "|---|------|----------|-----|--------|------------------------|\n" +
             "\n".join(rows)
         )
 

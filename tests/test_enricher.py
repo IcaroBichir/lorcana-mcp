@@ -336,11 +336,20 @@ class TestQuestCards:
         assert is_quest_only_row(_VINE)
         assert not is_quest_only_row({"Set Name": "Hyperia City", "Card Type": ""})
 
-    def test_listed_for_manual_dreamborn_entry(self):
-        result = _build_dreamborn_rows([_FOIL, _VINE])
-        assert result["rows"] == []
-        status = {q["name"]: q["playable"] for q in result["quest"]}
-        assert status == {"Mr. Incredible - Super Strong": True, "Yzma - Made by the Vine": False}
+    def test_dreamborn_rows(self):
+        lj = [{"fullName": "Mr. Incredible - Super Strong", "setCode": "12", "number": 127},
+              {"fullName": "Mr. Incredible - Super Strong", "setCode": "12", "number": 243}]
+        result = _build_dreamborn_rows([_FOIL, _VINE], lj)
+        # Reprint filed under the set/number printed on the card; quest-only card left out.
+        assert result["rows"] == [{"Set Number": 12, "Card Number": 243, "Variant": "foil", "Count": 1}]
+        status = {q["name"]: (q["playable"], q["dreamborn"]) for q in result["quest"]}
+        assert status == {"Mr. Incredible - Super Strong": (True, "12, 243"),
+                          "Yzma - Made by the Vine": (False, "")}
+
+    def test_reprint_without_exact_number_is_listed_not_guessed(self):
+        lj = [{"fullName": "Mr. Incredible - Super Strong", "setCode": "12", "number": 127}]
+        result = _build_dreamborn_rows([_FOIL], lj)
+        assert result["rows"] == [] and result["quest"][0]["dreamborn"] == ""
 
     def test_foil_borrows_regular_printing_stats(self):
         from lorcana_mcp.enricher import _resolve_quest
